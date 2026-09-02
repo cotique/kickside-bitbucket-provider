@@ -1,5 +1,6 @@
 organization: cotique
 module: bitbucket-provider
+type: plugin
 description: Bitbucket Cloud connector for Kickside Data Sync — a kickside.connection provider (app password or access token) plus a kickside.data:pullable source publishing a repository's pull requests as an automation port.
 # Pick the license your distribution requires (kickside platform modules use BUSL-1.1).
 license: MIT

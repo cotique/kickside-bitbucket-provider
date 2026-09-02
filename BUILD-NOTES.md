@@ -576,3 +576,44 @@ this module needing `required_if`. See that entry for the full account.
 **Verification:** `make verify` re-run clean end to end after this change —
 setup, invariants, lint, typecheck, build, and the full SQLite test suite
 all pass. See the repo's local commit for the exact test count.
+
+## Structural audit against the real reference modules (2026-09-02)
+
+With `providers-master\providers-master\atlassian` and `...\github` available
+locally, did a full file-by-file structural comparison beyond the
+`kickside.data:pullable` envelope (already covered above). Checked and
+confirmed fine, no change needed:
+
+- No `client/site.lua`-style base-URL/tenant resolution needed — Bitbucket
+  Cloud has no equivalent multi-tenant indirection to resolve.
+- Agent-tool traits (`jira/traits`, `confluence/traits`, `github/traits`) —
+  confirmed still correctly out of scope (see "Deliberate scope decisions"
+  above).
+- `kickside.data:writable` sinks (real Atlassian can also *write* issues/
+  pages via Data Sync, `jira/sink`, `confluence/sink`) — confirmed correctly
+  absent here; this module is read-only per eng-metrics SPEC.md decision B0,
+  not an oversight.
+- **Dependency set.** Real `github`/`atlassian` declare only
+  `kickside/component`, `kickside/connection`, `kickside/contract` (plus
+  `kickside/oauth`/`kickside/settings` for their OAuth mode, which this
+  module correctly doesn't have) — this module's `src/_index.yaml` already
+  matches that exactly, no `kickside/core` dependency needed
+  (`kickside.data:pullable` resolves transitively through the three declared
+  deps — confirmed via `wippy registry list --ns "kickside.data*"`). Its
+  sibling module, `kickside-gitlab-provider`, had picked up an unnecessary
+  explicit `kickside/core` dependency from a flawed earlier experiment and
+  has since been corrected to match this module's already-correct shape —
+  see that repo's own BUILD-NOTES.md.
+
+Found and fixed:
+
+- **`wippy.yaml` was missing the top-level `type: plugin` field** — checked
+  all 20 provider modules in the reference monorepo, every single one
+  declares it. Added.
+
+Flagged, not changed (a real decision, not a technical correctness issue):
+
+- **License.** Every real provider module in the reference monorepo uses
+  `BUSL-1.1`; this module still has the template's default `MIT`. Left
+  as-is — which license this repo ships under is the user's call, not
+  something to silently match to Wippy's own platform-module convention.
