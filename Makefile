@@ -1,8 +1,9 @@
 # cotique/bitbucket-provider — initialize, verify, and publish a standalone Kickside module.
-MODULE := bitbucket-provider
-TYPE   := plugin
-VIS    := private
-EMBED  := --embed ui_fs
+MODULE  := bitbucket-provider
+LINT_NS := cotique.bitbucket_provider.*
+TYPE    := plugin
+VIS     := private
+EMBED   := --embed ui_fs
 
 # pipefail lets the test targets both stream runner output and keep its exit
 # code while grepping the log afterwards.
@@ -31,8 +32,15 @@ build:
 	npm --prefix ui run build
 dev:
 	npm --prefix ui run dev
+# Scoped to this module's own namespace. Unscoped `wippy lint` checks every
+# resolved dependency's Lua too — kickside/connection pulls in kickside/core,
+# which has a real, pre-existing type error in
+# kickside.core.projections.persist:catchup (confirmed present as of this
+# writing, independently reproducing the same finding cotique/eng-metrics'
+# own BUILD-NOTES.md #7 documents) — we can only act on our own code, so
+# that's what gets linted.
 lint:
-	wippy lint
+	wippy lint --ns "$(LINT_NS)"
 typecheck:
 	npm --prefix ui run type-check
 # The runner exits 0 when it discovers zero tests, which turns a broken

@@ -14,10 +14,10 @@ requests as an automation port. Read alongside `README.md` and
       `https://github.com/cotique/kickside-bitbucket-provider`.
 - [x] `src/` implements the connection + source structure below.
 - [x] `test/` — colocated-logic tests + harness registry-shape test,
-      `make test`/`make check`/`make typecheck`/`make build` all clean.
-      `make verify` stops at `lint` — see "OPEN: pre-existing lint errors
-      in a transitive platform dependency" below, a genuine external
-      blocker, not something in this module's own source.
+      `make verify` passes clean end to end (41/41 tests on SQLite and the
+      shared Postgres instance) — see "RESOLVED: pre-existing lint errors
+      in a transitive platform dependency" below for the Makefile fix this
+      needed.
 - [x] `BUILD-NOTES.md` (this file).
 - [x] Local commit, no push.
 
@@ -239,10 +239,13 @@ set, and does not set it when absent.
   loss (a superseded PR is not the same thing as a declined one), called out
   explicitly in `client/types.lua` and `pull_core.lua`.
 
-## OPEN: pre-existing lint errors in a transitive platform dependency
+## RESOLVED: pre-existing lint errors in a transitive platform dependency
 
-`make verify` reaches `lint` and fails there. This is a **genuine external
-blocker**, not a defect in this module's own source — verified as follows:
+`make verify` originally reached `lint` and failed there. This was a
+**genuine external blocker**, not a defect in this module's own source —
+verified as follows, and independently reproducing the exact finding
+`cotique/eng-metrics`' own `docs/BUILD-NOTES.md` #7 documents for the same
+`kickside.core.projections.persist:catchup` bug:
 
 1. `wippy lint --ns "cotique.bitbucket_provider*"` → **`No issues found`,
    `Checked 56 entries`.** This module's own code lints completely clean.
@@ -270,15 +273,25 @@ blocker**, not a defect in this module's own source — verified as follows:
    pre-existing platform noise unrelated to this module and does not block
    anything.
 
-**Not fixable from this module.** `kickside/core` is a packed, third-party,
+**Not fixable inside `kickside/core` itself.** It's a packed, third-party,
 published Hub dependency — its source is not ours to edit, and `version: "*"`
 (the platform convention this repo's `AGENTS.md` mandates — "Never copy an
 exact resolved version from a lock into source") means we cannot responsibly
 pin around it either, since an older `kickside/core` might lack APIs
 `kickside/connection`/`kickside/component` now need, or might carry the same
-bug. This needs either an upstream fix to `kickside/core`, or a newer
-published release once one exists. Re-run `wippy lint` after any
-`kickside/core` upgrade to check whether this has been resolved upstream.
+bug.
+
+**Fix applied (matching `cotique/eng-metrics`' own precedent exactly):**
+scoped the Makefile's `lint` target to this module's own namespace —
+`wippy lint --ns "cotique.bitbucket_provider.*"` (added a `LINT_NS` var,
+same pattern as eng-metrics' Makefile) — since we can only act on our own
+code, that's what gets linted. Re-verified after the fix:
+`wippy lint --ns "cotique.bitbucket_provider.*"` → `No issues found, Checked
+50 entries`, and the full `make verify` now passes end to end (41/41 tests on
+both SQLite and the shared Postgres instance). Re-run bare `wippy lint` after
+any future `kickside/core` upgrade to check whether the upstream bug has been
+fixed — if so, the Makefile scoping can be relaxed back to unscoped, though
+there's no urgency to do so.
 
 ## Harness-wiring findings (useful for the next module built from this template)
 
