@@ -281,3 +281,23 @@ entries:
         value: app:gateway
       - name: wippy.migration:app_db
         value: app:db
+
+  # Declared explicitly (rather than relying purely on the .wippy.yaml
+  # workspace replacement to surface it) so its own user_security_scope
+  # requirement resolves through the same ns.dependency `parameters:`
+  # pipeline stage as every other harness dependency above. A raw
+  # .wippy.yaml path override targeting an entry inside a workspace-replaced
+  # module ("cotique.bitbucket_provider.security:user_security_scope:data.default")
+  # stopped resolving under wippy runtime v0.3.35a+ — "no entry found" at
+  # the override stage — even though `parameters:` on a declared
+  # ns.dependency for the exact same entry resolves fine. Same fix as
+  # cotique/career-kickside; see that repo's docs/FINDINGS.md.
+  - name: bitbucket_provider_harness.dep.module
+    version: "*"
+    kind: ns.dependency
+    meta:
+      comment: The module under test itself — workspace-replaced by test/.wippy.yaml, declared here only so its own user_security_scope requirement can be wired via `parameters:`.
+    component: "cotique/bitbucket-provider"
+    parameters:
+      - name: cotique.bitbucket_provider.security:user_security_scope
+        value: app:user

@@ -8,8 +8,6 @@ version: "1.0"
 workspace:
   replacements:
     cotique/bitbucket-provider: ..
-override:
-  "cotique.bitbucket_provider.security:user_security_scope:data.default": app:user
 vars:
   pg_host: localhost
   pg_port: 5433
