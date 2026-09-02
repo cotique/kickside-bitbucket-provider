@@ -102,11 +102,11 @@ local function define_tests()
             test.not_nil(m.credential_schema, "connection binding must declare a credential_schema")
             test.not_nil(m.credential_schema.fields, "credential_schema must declare fields")
 
-            local has_auth_mode = false
+            local has_access_token = false
             for _, f in ipairs(m.credential_schema.fields) do
-                if f.key == "auth_mode" then has_auth_mode = true end
+                if f.key == "access_token" then has_access_token = true end
             end
-            test.is_true(has_auth_mode, "credential_schema must declare the auth_mode selector")
+            test.is_true(has_access_token, "credential_schema must declare the access_token field")
         end)
 
         test.it("wires the get_status/test_connection/discover_resources/delete function entries", function()

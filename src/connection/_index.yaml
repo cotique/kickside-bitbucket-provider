@@ -61,19 +61,13 @@ entries:
   # Data Center is a different API/auth model entirely and is out of scope
   # (see BUILD-NOTES.md).
   #
-  # credential_schema below (the two-mode select + required_if shape) is
-  # built from docs/kickside-development/04-connections-and-integrations.md
-  # ("Multiple Credential Modes" — "model the modes explicitly ... do not
-  # probe one path and silently fall back to another") using the generic
-  # `required_if` mention in the same doc's Credential Handling section. The
-  # EXACT required_if matching syntax is NOT independently verified — no
-  # vendored doc or reachable wippy.ai/llm page documents credential_schema
-  # or required_if's real shape (checked during this build; see
-  # BUILD-NOTES.md "OPEN: required_if syntax"). If this shape does not
-  # parse against the real create_policy validator, only this credential_schema
-  # block needs to change — auth_mode selection is otherwise fully isolated
-  # in client:transport.for_credentials, which is unit-tested directly
-  # against plain credential tables and does not depend on this schema.
+  # Single-field credential_schema, mirroring cotique/gitlab-provider's
+  # `gitlab_connection` shape: Bitbucket Cloud app passwords are fully
+  # deprecated (creation stopped 2025-09-09, brownout 2026-06-09..2026-07-27,
+  # full removal completed 2026-07-28 — see BUILD-NOTES.md's dated entry).
+  # Repository/workspace access tokens are now the only supported credential
+  # mode, so the earlier two-mode `auth_mode` select + `required_if` fields
+  # have been removed entirely — see BUILD-NOTES.md for what this replaces.
   - name: bitbucket_connection
     kind: contract.binding
     meta:
@@ -87,31 +81,11 @@ entries:
         version: "1.0"
         submit_label: Connect
         fields:
-          - key: auth_mode
-            label: Authentication method
-            type: select
-            required: true
-            default: app_password
-            options:
-              - value: app_password
-                label: App password
-              - value: access_token
-                label: Repository or workspace access token
-          - key: username
-            label: Bitbucket username
-            type: text
-            required_if: { auth_mode: app_password }
-            help: "The Bitbucket Cloud account username the app password belongs to (not your email)."
-          - key: app_password
-            label: App password
-            type: password
-            required_if: { auth_mode: app_password }
-            help: "Create one at Personal settings > App passwords, with only the Repositories: Read and Pull requests: Read permissions checked."
           - key: access_token
             label: Access token
             type: password
-            required_if: { auth_mode: access_token }
-            help: "A repository or workspace access token scoped to Repositories: Read and Pull requests: Read only."
+            required: true
+            help: "Create one at a repository's own Settings > Security > Access tokens, scoped to Repositories: Read and Pull requests: Read only."
     contracts:
       - contract: kickside.contract:component
         methods:

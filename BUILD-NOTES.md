@@ -1,7 +1,8 @@
 # Build notes — cotique/bitbucket-provider
 
 This module is a Bitbucket Cloud connector for the Kickside platform: a
-`kickside.connection` provider (app password or access token) plus a
+`kickside.connection` provider (access token only — see the 2026-09-02
+entry below for why app passwords were removed) plus a
 `kickside.data:pullable` source publishing a selected repository's pull
 requests as an automation port. Read alongside `README.md` and
 `AGENTS.md`.
@@ -93,8 +94,8 @@ lease, schedule, dedup, id-map, and sink routing"); `ui/src/types.ts` and
   writer/manager, matching `kickside.github.traits:*`) — explicitly out of
   scope per the brief.
 - **Read-only, always.** No write/comment/approve/merge methods anywhere,
-  matching eng-metrics SPEC.md decision B0. Both credential modes' `help`
-  text tells the user to scope the token/app password to
+  matching eng-metrics SPEC.md decision B0. The credential field's `help`
+  text tells the user to scope the access token to
   `Repositories: Read` + `Pull requests: Read` only.
 
 ## RESOLVED: `kickside.data:pullable` request/response shape
@@ -283,9 +284,21 @@ reconcile:
 at the same `pull_keys` function.lua entry that was previously registered
 but structurally unreachable. `pull_keys` is not dead code.
 
-## OPEN: `required_if` credential_schema syntax
+## RESOLVED (moot): `required_if` credential_schema syntax
 
-Not independently verifiable. Checked, in order:
+**Resolved by removal, not by verification, in the 2026-09-02 entry below.**
+The `required_if` usage this section describes existed only to make
+`username`/`app_password` conditionally required when `auth_mode ==
+app_password`. That whole mode was deleted from `credential_schema` (app
+passwords are fully deprecated on Bitbucket Cloud), leaving a single
+required `access_token` field with no conditional-requirement logic at all.
+There is nothing left in this module's `credential_schema` that needs
+`required_if`, so the open question below is moot for this module — kept
+verbatim for the historical record in case a future credential mode here
+(or another module) needs conditional fields and wants to know this was
+never independently confirmed.
+
+Not independently verifiable at the time. Checked, in order:
 1. `docs/kickside-development/04-connections-and-integrations.md` — states
    the create policy "enforces `required`, type, `select` options, and
    `required_if`" but gives no syntax example beyond the generic mention.
@@ -340,7 +353,13 @@ set, and does not set it when absent.
   `pull_core.fetch_page`/`list_all`, which stop purely on `next` being absent.
 - Auth: `app_password` mode → HTTP Basic
   (`Authorization: Basic base64(username:app_password)`); `access_token`
-  mode → `Authorization: Bearer <token>`. Both implemented in `client/api.lua`.
+  mode → `Authorization: Bearer <token>`. Both implemented in `client/api.lua`
+  at the time of this finding. **Since the 2026-09-02 entry below, only the
+  `access_token`/Bearer path is reachable from stored credentials** —
+  `client/api.lua`'s `app_password`/Basic-auth branch is kept as a generic,
+  unreachable capability of the low-level client (no credential_schema field
+  or `transport.for_credentials` path produces `app_password` opts anymore),
+  since removing it was out of scope for that change.
 - Field mapping (`pull_core.normalize_item`): `author.display_name`,
   `source.branch.name`, `destination.branch.name`, `created_on`/`updated_on`
   (note the `_on` vs. the normalized shape's `_at`), `links.html.href`.
@@ -486,6 +505,74 @@ binding, correct method map, correct automation port shape) is verified via
 this build to run the end-to-end exercise
 `docs/kickside-development/13-testing.md` calls for on success paths a
 standalone harness cannot represent. Whoever next has access to a live host
-should run a real Connect flow (app password and access token modes both)
-against a real Bitbucket workspace before considering this module fully
-proven.
+should run a real Connect flow (access token mode — the only supported mode
+since the 2026-09-02 entry below) against a real Bitbucket workspace before
+considering this module fully proven.
+
+## 2026-09-02: removed `app_password` credential mode — Bitbucket Cloud app passwords are deprecated and removed
+
+**What changed.** `credential_schema` on `bitbucket_connection`
+(`src/connection/_index.yaml`) no longer offers a two-mode `auth_mode`
+select. The `auth_mode`, `username`, and `app_password` fields are gone;
+the schema now has exactly one field, `access_token` (password-type,
+required), with `help` text pointing at the real current navigation:
+"Create one at a repository's own Settings > Security > Access tokens,
+scoped to Repositories: Read and Pull requests: Read only." This mirrors
+`cotique/gitlab-provider`'s single-field `gitlab_connection` credential_schema
+shape (`token`, no `auth_mode`), since Bitbucket now genuinely has only one
+supported credential mode, same as GitLab.
+
+`src/client/transport.lua`'s `M.for_credentials` no longer branches on
+`auth_mode`. It builds the client directly from `creds.access_token` via
+`api.new({ auth_mode = types.AUTH_MODE.ACCESS_TOKEN, access_token = ... })`
+— the `app_password`/Basic-auth branch (username + app_password) was
+deleted from this function entirely. `client/api.lua`'s own lower-level
+`app_password`/Basic-auth branch was left in place (out of scope for this
+change; see the annotation added to "Empirically-verified findings" above)
+since nothing in `transport.lua` can reach it anymore — it is now
+unreachable dead capability of the generic low-level client, not a
+user-facing credential mode.
+
+Tests: `test/src/transport_test.lua`'s app_password-mode cases ("builds a
+basic-auth client for app_password mode", "rejects app_password mode
+missing the app_password field", "defaults to app_password mode when
+auth_mode is not set") were removed — there is no `auth_mode` field left to
+default, and no app_password branch left to test. The access_token-mode
+case was kept and renamed ("builds a bearer-auth client for the stored
+access token"); the "rejects access_token mode missing the access_token
+field" case was kept (renamed "rejects credentials missing the access_token
+field") and a new "rejects an empty access_token" case was added for parity
+with the removed cases' coverage shape. The "rejects an unknown auth_mode"
+case was removed — there is no `auth_mode` concept left in
+`for_credentials` to reject.
+
+`test/src/wiring_test.lua`'s "declares the Bitbucket connection provider
+binding with a credential_schema" case asserted an `auth_mode` select field
+existed; it now asserts an `access_token` field exists instead.
+
+**Why.** Verified this session against Atlassian's own official docs (not
+re-derived from training data):
+- New Bitbucket Cloud app-password creation stopped 2025-09-09.
+- Brownout period ran 2026-06-09 through 2026-07-27.
+- Full removal completed 2026-07-28 (in the past as of today, 2026-09-02).
+- <https://www.atlassian.com/blog/bitbucket/bitbucket-cloud-transitions-to-api-tokens-enhancing-security-with-app-password-deprecation>
+- <https://www.atlassian.com/blog/bitbucket/bitbucket-cloud-enters-phase-2-of-app-password-deprecation>
+- Replacement: repository- or workspace-scoped access tokens, created via a
+  repository's own Settings > Security > Access tokens —
+  <https://support.atlassian.com/bitbucket-cloud/docs/create-a-repository-access-token/>
+  (current official docs, fetched and confirmed this session).
+
+Offering `app_password` as a connect-form option was actively misleading:
+nobody can create a new app password anymore, so a user picking that mode
+would hit a dead end in Bitbucket's own UI, which no longer has an
+app-password-creation page at all.
+
+**Resolves, as moot:** the "RESOLVED (moot): `required_if` credential_schema
+syntax" entry above — the only `required_if` usage in this module existed to
+make `username`/`app_password` conditionally required under
+`auth_mode: app_password`; that mode is gone, so there is nothing left in
+this module needing `required_if`. See that entry for the full account.
+
+**Verification:** `make verify` re-run clean end to end after this change —
+setup, invariants, lint, typecheck, build, and the full SQLite test suite
+all pass. See the repo's local commit for the exact test count.

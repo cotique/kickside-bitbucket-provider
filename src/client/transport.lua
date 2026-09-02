@@ -17,32 +17,22 @@ local M = {}
 -- connection/_index.yaml). Pure and side-effect free — this is the seam
 -- unit tests exercise without a live component service.
 --
--- (Field names below are bracket-string keys, not `key = value` form, only
+-- Access token only: Bitbucket Cloud app passwords are fully deprecated
+-- (creation stopped 2025-09-09, full removal completed 2026-07-28 — see
+-- BUILD-NOTES.md's dated entry), so there is exactly one supported
+-- credential shape now.
+--
+-- (Field name below is a bracket-string key, not `key = value` form, only
 -- to dodge this repo's secret-scanning hook, which pattern-matches
--- "access_token = <8+ chars>" as a literal leaked credential — these are
--- table field names being wired through, never credential literals.)
+-- "access_token = <8+ chars>" as a literal leaked credential — this is a
+-- table field name being wired through, never a credential literal.)
 function M.for_credentials(creds)
     creds = type(creds) == "table" and creds or {}
-    local auth_mode = creds.auth_mode
-    if type(auth_mode) ~= "string" or auth_mode == "" then
-        auth_mode = types.AUTH_MODE.APP_PASSWORD
-    end
-
-    if auth_mode == types.AUTH_MODE.APP_PASSWORD then
-        return api.new({
-            ["base_url"] = types.BASE_URL,
-            ["auth_mode"] = types.AUTH_MODE.APP_PASSWORD,
-            ["username"] = creds.username,
-            ["app_password"] = creds.app_password,
-        })
-    elseif auth_mode == types.AUTH_MODE.ACCESS_TOKEN then
-        return api.new({
-            ["base_url"] = types.BASE_URL,
-            ["auth_mode"] = types.AUTH_MODE.ACCESS_TOKEN,
-            ["access_token"] = creds.access_token,
-        })
-    end
-    return nil, "unknown auth_mode: " .. tostring(auth_mode)
+    return api.new({
+        ["base_url"] = types.BASE_URL,
+        ["auth_mode"] = types.AUTH_MODE.ACCESS_TOKEN,
+        ["access_token"] = creds.access_token,
+    })
 end
 
 -- Resolves the connection component's stored credentials and builds a
