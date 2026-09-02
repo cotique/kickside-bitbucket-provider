@@ -93,11 +93,12 @@ entries:
     kind: registry.entry
     meta:
       type: ui.nav_item
+      private: true
       section: ""
       path: /bitbucket-provider
       route_name: bitbucket-provider
       title: Bitbucket Connector
-      comment: Bitbucket Cloud connection and pull-request source module status.
+      comment: Bitbucket Cloud connection and pull-request source module status. No standalone page — reachable only via Connections' Connect-app flow.
       icon: tabler:terminal-2
       order: 90
       render: component
