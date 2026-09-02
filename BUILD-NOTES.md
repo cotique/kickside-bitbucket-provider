@@ -18,20 +18,15 @@ requests as an automation port. Read alongside `README.md` and
       to end (56/56 tests on SQLite, re-verified after the
       `kickside.data:pullable` envelope correction pass — see "RESOLVED:
       `kickside.data:pullable` request/response shape" above).
-      `make test-pg` (the shared Postgres profile) was **not** re-run in
-      that same pass: this machine's host port 5433 — the port
-      `test/.wippy.yaml`'s `postgres` profile and `compose.test.yaml` both
-      hardcode for the shared Postgres convention — was occupied by an
-      unrelated, already-running `job-search-ai-postgres-1` container
-      (a different local project's own dev database, not part of this
-      module or its dependency graph). Freeing that port means stopping
-      someone else's running container, which is outside what this session
-      is authorized to do unilaterally — flagged for the user rather than
-      forced. `make test-pg` needs a re-run once port 5433 is free to
-      confirm parity with the SQLite result above; nothing in this pass's
-      changes is Postgres-specific (no migrations, no SQL — this module
-      owns no tables), so no divergence is expected, but it is unconfirmed
-      as of this note.
+      Postgres confirmed too: `test/.wippy.yaml`'s default port 5433 was
+      occupied by an unrelated `job-search-ai-postgres-1` container from a
+      different local project, so instead of stopping someone else's
+      container, the already-running shared `wippy-postgres` instance on the
+      default port 5432 was reused (same convention `cotique/eng-metrics`'
+      own BUILD-NOTES documents) — `wippy test --profile postgres --set
+      vars.pg_port=5432` from `test/`, 56/56 passing, confirming parity with
+      the SQLite result above. No repo changes needed; `compose.test.yaml`'s
+      own port-5433 default stays correct for CI/other developers.
       See "RESOLVED: pre-existing lint errors
       in a transitive platform dependency" below for the earlier Makefile fix this
       needed.

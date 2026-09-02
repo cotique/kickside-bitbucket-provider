@@ -121,22 +121,42 @@ entries:
         description: Pull requests fetched per page (Bitbucket's own default/max is 50).
         default: 50
         picker: wc-schema-form
+    # Describes the FULL pullable item envelope M.pull actually emits
+    # (item_key/dedup_key/op/source_version/occurred_at/payload), not just
+    # the payload's own fields — matching the real
+    # kickside.atlassian.jira.source:issues port's output_schema shape
+    # (providers-master\providers-master\atlassian\src\jira\source\_index.yaml,
+    # local unpacked copy of git.wippy.ai/kickside/providers). The previous
+    # version of this schema described only the payload fields, missing the
+    # envelope wrapper — fixed here for consistency with the real reference.
     output_schema: |
       { "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
-          "id": { "type": "string", "description": "Provider-native pull request id." },
-          "title": { "type": "string" },
-          "state": { "type": "string", "enum": ["open", "merged", "closed", "declined"] },
-          "author": { "type": ["string", "null"] },
-          "source_branch": { "type": ["string", "null"] },
-          "target_branch": { "type": ["string", "null"] },
-          "created_at": { "type": "string" },
-          "updated_at": { "type": "string" },
-          "merged_at": { "type": ["string", "null"] },
-          "source_url": { "type": ["string", "null"] },
-          "raw": { "type": "object", "description": "Original Bitbucket API item, untouched." }
-        } }
+          "item_key": { "type": "string", "description": "Stable item identity, bitbucket:<workspace>/<repo_slug>:pr:<id>." },
+          "dedup_key": { "type": "string", "description": "Delivery idempotency key including op and source_version." },
+          "op": { "type": "string", "enum": ["upsert"] },
+          "source_version": { "type": ["string", "null"], "description": "Bitbucket updated_on/created_on timestamp used for ordering and deduplication." },
+          "occurred_at": { "type": ["string", "null"] },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "id": { "type": ["string", "null"], "description": "Provider-native pull request id." },
+              "title": { "type": "string" },
+              "state": { "type": "string", "enum": ["open", "merged", "closed", "declined"] },
+              "author": { "type": ["string", "null"] },
+              "source_branch": { "type": ["string", "null"] },
+              "target_branch": { "type": ["string", "null"] },
+              "created_at": { "type": ["string", "null"] },
+              "updated_at": { "type": ["string", "null"] },
+              "merged_at": { "type": ["string", "null"] },
+              "source_url": { "type": ["string", "null"] },
+              "raw": { "type": "object", "description": "Original Bitbucket API item, untouched." }
+            },
+            "required": ["title", "state"]
+          }
+        },
+        "required": ["item_key", "dedup_key", "op"] }
     operations:
       pull: {}
 
