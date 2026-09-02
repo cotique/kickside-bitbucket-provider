@@ -1,15 +1,15 @@
-organization: acme
-module: starter
-description: Starter module scaffold — a writable log sink published as an automation port, persisted rows, a status API, and a web-component page.
+organization: cotique
+module: bitbucket-provider
+description: Bitbucket Cloud connector for Kickside Data Sync — a kickside.connection provider (app password or access token) plus a kickside.data:pullable source publishing a repository's pull requests as an automation port.
 # Pick the license your distribution requires (kickside platform modules use BUSL-1.1).
 license: MIT
-repository: https://github.com/acme/starter
+repository: https://github.com/cotique/kickside-bitbucket-provider
 homepage: https://wippy.ai
 keywords:
   - kickside
-  - starter
+  - bitbucket-provider
 embed:
-  - acme.starter:ui_fs
+  - cotique.bitbucket_provider:ui_fs
 exclude_meta:
   type:
     - test

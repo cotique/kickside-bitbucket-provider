@@ -1,11 +1,11 @@
 import { WippyVueElement, define } from '@wippy-fe/webcomponent-vue'
 import type { WippyElementConfig, WippyPropsSchema } from '@wippy-fe/webcomponent-vue'
 import type { ComponentProps } from './types.ts'
-import Starter from './app/starter.vue'
+import CotiqueBitbucketProviderView from './app/bitbucket-provider.vue'
 import stylesText from './styles.css?inline'
 import pkg from '../package.json'
 
-class AcmeStarterElement extends WippyVueElement<ComponentProps, Record<string, never>> {
+class CotiqueBitbucketProviderElement extends WippyVueElement<ComponentProps, Record<string, never>> {
   static get wippyConfig(): WippyElementConfig<ComponentProps> {
     return {
       propsSchema: pkg.wippy.props as WippyPropsSchema,
@@ -15,12 +15,12 @@ class AcmeStarterElement extends WippyVueElement<ComponentProps, Record<string, 
   }
 
   static get vueConfig() {
-    return { rootComponent: Starter }
+    return { rootComponent: CotiqueBitbucketProviderView }
   }
 }
 
 export async function webComponent() {
-  return AcmeStarterElement
+  return CotiqueBitbucketProviderElement
 }
 
-define(import.meta.url, AcmeStarterElement)
+define(import.meta.url, CotiqueBitbucketProviderElement)

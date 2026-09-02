@@ -1,0 +1,132 @@
+version: "1.0"
+namespace: cotique.bitbucket_provider.source
+
+entries:
+  # cotique.bitbucket_provider.source:pull_core
+  - name: pull_core
+    kind: library.lua
+    meta:
+      comment: Bitbucket Cloud pull-request fetch, pagination, and normalization. Fully tested against fakes — no dependency on the kickside.data:pullable envelope.
+    source: file://pull_core.lua
+    imports:
+      types: cotique.bitbucket_provider.client:types
+
+  # cotique.bitbucket_provider.source:pull_items
+  - name: pull_items
+    kind: function.lua
+    meta:
+      comment: kickside.data:pullable.pull for Bitbucket Cloud pull requests. Request/response envelope INFERRED, see pull.lua header and BUILD-NOTES.md.
+    source: file://pull.lua
+    modules:
+      - ctx
+    imports:
+      pull_core: cotique.bitbucket_provider.source:pull_core
+      transport: cotique.bitbucket_provider.client:transport
+    method: pull
+
+  # cotique.bitbucket_provider.source:pull_keys
+  - name: pull_keys
+    kind: function.lua
+    meta:
+      comment: Keys-only Bitbucket Cloud pull request listing used by Data Sync reconcile. Same inferred envelope as pull_items, see pull.lua header.
+    source: file://pull.lua
+    modules:
+      - ctx
+    imports:
+      pull_core: cotique.bitbucket_provider.source:pull_core
+      transport: cotique.bitbucket_provider.client:transport
+    method: pull_keys
+
+  # cotique.bitbucket_provider.source:repo_pulls_source
+  # Implements kickside.data:pullable for a selected repository's pull
+  # requests. context_required: [component_id] follows the same pattern the
+  # connection binding uses — the engine opens this binding with the
+  # connection component as context so pull() can resolve credentials via
+  # ctx.get("component_id"), per docs/kickside-development/
+  # 05-knowledge-uploads-automation-inbox.md ("the pullable source opens
+  # with the connection as component_id context").
+  #
+  # CONFIRMED live against the real kickside.data:pullable contract
+  # definition (booted in the standalone test harness, see BUILD-NOTES.md
+  # "OPEN: kickside.data:pullable request/response shape"): the contract
+  # accepts only ONE bound method, `pull`. Binding `pull_keys` here as a
+  # second kickside.data:pullable method is REJECTED at registry-commit time
+  # with "bound method is not defined in contract definition" — this is not
+  # a guess, it is the real validator's answer. pull_keys.lua/pull_keys the
+  # registry entry is kept (kickside/github ships the identical shape, see
+  # BUILD-NOTES.md), but it is NOT wired through this contract; exactly how
+  # Data Sync's reconcile path reaches it is still open — see BUILD-NOTES.md.
+  - name: repo_pulls_source
+    kind: contract.binding
+    meta:
+      title: Bitbucket Pull Requests
+      comment: Pull requests from a selected Bitbucket Cloud repository.
+      group: Developer
+      icon: tabler:brand-bitbucket
+      provider: bitbucket
+      class:
+        - kickside.code
+    contracts:
+      - contract: kickside.data:pullable
+        context_required: [component_id]
+        methods:
+          pull: cotique.bitbucket_provider.source:pull_items
+
+  # cotique.bitbucket_provider.source:repo_pulls
+  # Automation port shape (config_schema/operations) per the template's own
+  # confirmed log/log_sink port (src/_index.yaml before this module removed
+  # the demo sink) plus, by symmetry, an output_schema for the source side —
+  # explicitly flagged as inferred alongside the pull.lua envelope, since no
+  # real kickside.data:pullable port declaration was inspectable (packed
+  # module — see BUILD-NOTES.md).
+  - name: repo_pulls
+    kind: registry.entry
+    meta:
+      type: kickside.automation.port
+      title: Bitbucket Pull Requests
+      comment: Read pull requests from a selected Bitbucket Cloud repository.
+      icon: tabler:brand-bitbucket
+    binding: cotique.bitbucket_provider.source:repo_pulls_source
+    config_schema:
+      workspace:
+        type: string
+        title: Workspace
+        description: Bitbucket workspace slug that owns the repository (the first segment of its full_name, e.g. "acme" in "acme/my-repo").
+        picker: wc-schema-form
+      repo_slug:
+        type: string
+        title: Repository
+        description: Repository slug within the workspace (the second segment of its full_name, e.g. "my-repo" in "acme/my-repo").
+        picker: wc-schema-form
+      state:
+        type: string
+        title: Pull request state filter
+        description: Optional Bitbucket state filter (OPEN, MERGED, DECLINED, SUPERSEDED). Leave empty to use Bitbucket's own default, which returns open pull requests only (verified empirically, see BUILD-NOTES.md).
+        picker: wc-schema-form
+      pagelen:
+        type: number
+        title: Page size
+        description: Pull requests fetched per page (Bitbucket's own default/max is 50).
+        default: 50
+        picker: wc-schema-form
+    output_schema: |
+      { "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Provider-native pull request id." },
+          "title": { "type": "string" },
+          "state": { "type": "string", "enum": ["open", "merged", "closed", "declined"] },
+          "author": { "type": ["string", "null"] },
+          "source_branch": { "type": ["string", "null"] },
+          "target_branch": { "type": ["string", "null"] },
+          "created_at": { "type": "string" },
+          "updated_at": { "type": "string" },
+          "merged_at": { "type": ["string", "null"] },
+          "url": { "type": ["string", "null"] },
+          "raw": { "type": "object", "description": "Original Bitbucket API item, untouched." }
+        } }
+    operations:
+      pull: {}
+
+  # pull_core_test.lua lives in test/src/ (the standalone harness), not
+  # here — see the equivalent note in ../client/_index.yaml for why.

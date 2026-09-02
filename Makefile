@@ -1,5 +1,5 @@
-# acme/starter — initialize, verify, and publish a standalone Kickside module.
-MODULE := starter
+# cotique/bitbucket-provider — initialize, verify, and publish a standalone Kickside module.
+MODULE := bitbucket-provider
 TYPE   := plugin
 VIS    := private
 EMBED  := --embed ui_fs
@@ -12,9 +12,17 @@ SHELL := bash
 .PHONY: init setup check build dev lint typecheck test test-pg postgres-up postgres-down verify release-check publish
 init:
 	node scripts/init-module.mjs --organization "$(ORG)" --module "$(MODULE_NAME)" --title "$(TITLE)" $(if $(NAMESPACE),--namespace "$(NAMESPACE)",) $(if $(TAG),--tag "$(TAG)",) $(if $(GITHUB_OWNER),--github-owner "$(GITHUB_OWNER)",)
+# The harness `wippy update` runs twice, deliberately: a from-scratch run
+# (no lock file yet) does not scan the test/.wippy.yaml workspace
+# replacement for the module-under-test's own transitive deps (resolves
+# only the harness's own 3 declared deps, 5 modules total) — confirmed
+# empirically, see BUILD-NOTES.md. A second run, once *some* lock already
+# exists, does pick up the replacement path and expands to the full graph
+# (kickside/connection, kickside/component, and their own transitive deps).
 setup:
 	wippy update
 	cd test && wippy update
+	cd test && wippy update --config .wippy.yaml
 	npm --prefix ui ci
 check:
 	node scripts/check-module.mjs

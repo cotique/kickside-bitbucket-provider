@@ -155,18 +155,18 @@ conventional module `src/` tree.
 
 ## Included vertical slice
 
-The executable example is `acme/starter` until initialized:
+The executable example is `cotique/bitbucket-provider` until initialized:
 
-- `acme.starter:definition` is the authoritative root `ns.definition`.
-- `acme.starter:log` is a typed automation destination port.
-- `acme.starter:log_sink` binds the shared `kickside.data:writable` contract.
-- `acme.starter.sink:write` validates and persists one acknowledged write.
-- `acme.starter.persist:repo` owns SQL access.
-- `acme.starter.migrations:01_create_log_entries` supports SQLite and Postgres.
-- `acme.starter.api:get_status.endpoint` exposes authenticated module status.
-- `acme.starter:starter_view` publishes an announced, auto-registered Wippy
+- `cotique.bitbucket_provider:definition` is the authoritative root `ns.definition`.
+- `cotique.bitbucket_provider:log` is a typed automation destination port.
+- `cotique.bitbucket_provider:log_sink` binds the shared `kickside.data:writable` contract.
+- `cotique.bitbucket_provider.sink:write` validates and persists one acknowledged write.
+- `cotique.bitbucket_provider.persist:repo` owns SQL access.
+- `cotique.bitbucket_provider.migrations:01_create_log_entries` supports SQLite and Postgres.
+- `cotique.bitbucket_provider.api:get_status.endpoint` exposes authenticated module status.
+- `cotique.bitbucket_provider:bitbucket_provider_view` publishes an announced, auto-registered Wippy
   web component served by the module's own embedded filesystem.
-- `acme.starter.blocks:block.write_log` contributes the capability to the
+- `cotique.bitbucket_provider.blocks:block.write_log` contributes the capability to the
   headless Block catalog (`kickside.block/v1`) so Automations, Workflows, and
   agents can compose it; `block_write_log` is its function implementation and
   runs the same persistence path as the sink.

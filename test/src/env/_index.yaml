@@ -1,0 +1,18 @@
+version: "1.0"
+namespace: app.env
+
+# Minimal env storage so the transitive kickside/core dependency's own
+# env.variable entries (e.g. kickside.core.projections:env_batch_size_default)
+# resolve in the standalone harness — discovered iteratively per
+# docs/kickside-development/13-testing.md "Harness Limits". This module
+# itself declares no env.variable entries; this exists purely to satisfy a
+# platform dependency's hardcoded `storage: app.env:store` reference (per
+# docs/kickside-development/16-conventions.md "Env" — Idiom A entries are
+# bound to app.env:store directly, not through a requirement token).
+
+entries:
+  - name: store
+    kind: env.storage.static
+    meta:
+      comment: Static, empty env storage backing platform env.variable defaults in the test harness.
+    values: {}

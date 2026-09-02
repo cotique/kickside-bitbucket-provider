@@ -1,0 +1,131 @@
+version: "1.0"
+namespace: cotique.bitbucket_provider.connection
+
+entries:
+  # cotique.bitbucket_provider.connection:connection_lib
+  - name: connection_lib
+    kind: library.lua
+    meta:
+      comment: Shared connection helper — resolves component_id from ambient context and builds a configured API client.
+    source: file://connection_lib.lua
+    modules:
+      - ctx
+    imports:
+      transport: cotique.bitbucket_provider.client:transport
+
+  # cotique.bitbucket_provider.connection:get_status
+  - name: get_status
+    kind: function.lua
+    meta:
+      comment: kickside.contract:component get_status — delegates to kickside.connection:base_connection boilerplate.
+    source: file://get_status.lua
+    imports:
+      base_connection: kickside.connection:base_connection
+    method: get_status
+
+  # cotique.bitbucket_provider.connection:delete
+  - name: delete
+    kind: function.lua
+    meta:
+      comment: kickside.contract:deletable delete — delegates to kickside.connection:base_connection boilerplate.
+    source: file://delete.lua
+    imports:
+      base_connection: kickside.connection:base_connection
+    method: delete
+
+  # cotique.bitbucket_provider.connection:test_connection
+  - name: test_connection
+    kind: function.lua
+    meta:
+      comment: kickside.connection:connection test_connection — live GET /user call proving the stored credential works.
+    source: file://test_connection.lua
+    imports:
+      connection_lib: cotique.bitbucket_provider.connection:connection_lib
+    method: test_connection
+
+  # cotique.bitbucket_provider.connection:discover_resources
+  - name: discover_resources
+    kind: function.lua
+    meta:
+      comment: kickside.connection:connection discover_resources — lists accessible Bitbucket repositories.
+    source: file://discover_resources.lua
+    imports:
+      connection_lib: cotique.bitbucket_provider.connection:connection_lib
+      types: cotique.bitbucket_provider.client:types
+    method: discover_resources
+
+  # cotique.bitbucket_provider.connection:bitbucket_connection
+  # The canonical credential-only provider binding shape, per
+  # docs/kickside-development/04-connections-and-integrations.md "Minimal
+  # Provider Example". Bitbucket Cloud only (api.bitbucket.org/2.0) — Server/
+  # Data Center is a different API/auth model entirely and is out of scope
+  # (see BUILD-NOTES.md).
+  #
+  # credential_schema below (the two-mode select + required_if shape) is
+  # built from docs/kickside-development/04-connections-and-integrations.md
+  # ("Multiple Credential Modes" — "model the modes explicitly ... do not
+  # probe one path and silently fall back to another") using the generic
+  # `required_if` mention in the same doc's Credential Handling section. The
+  # EXACT required_if matching syntax is NOT independently verified — no
+  # vendored doc or reachable wippy.ai/llm page documents credential_schema
+  # or required_if's real shape (checked during this build; see
+  # BUILD-NOTES.md "OPEN: required_if syntax"). If this shape does not
+  # parse against the real create_policy validator, only this credential_schema
+  # block needs to change — auth_mode selection is otherwise fully isolated
+  # in client:transport.for_credentials, which is unit-tested directly
+  # against plain credential tables and does not depend on this schema.
+  - name: bitbucket_connection
+    kind: contract.binding
+    meta:
+      title: Bitbucket
+      icon: tabler:brand-bitbucket
+      provider: bitbucket
+      group: Developer
+      class:
+        - connection
+      credential_schema:
+        version: "1.0"
+        submit_label: Connect
+        fields:
+          - key: auth_mode
+            label: Authentication method
+            type: select
+            required: true
+            default: app_password
+            options:
+              - value: app_password
+                label: App password
+              - value: access_token
+                label: Repository or workspace access token
+          - key: username
+            label: Bitbucket username
+            type: text
+            required_if: { auth_mode: app_password }
+            help: "The Bitbucket Cloud account username the app password belongs to (not your email)."
+          - key: app_password
+            label: App password
+            type: password
+            required_if: { auth_mode: app_password }
+            help: "Create one at Personal settings > App passwords, with only the Repositories: Read and Pull requests: Read permissions checked."
+          - key: access_token
+            label: Access token
+            type: password
+            required_if: { auth_mode: access_token }
+            help: "A repository or workspace access token scoped to Repositories: Read and Pull requests: Read only."
+    contracts:
+      - contract: kickside.contract:component
+        methods:
+          get_status: cotique.bitbucket_provider.connection:get_status
+      - contract: kickside.connection:connection
+        context_required: [component_id]
+        methods:
+          get_status: cotique.bitbucket_provider.connection:get_status
+          test_connection: cotique.bitbucket_provider.connection:test_connection
+          discover_resources: cotique.bitbucket_provider.connection:discover_resources
+      - contract: kickside.contract:deletable
+        context_required: [component_id]
+        methods:
+          delete: cotique.bitbucket_provider.connection:delete
+
+  # discover_resources_test.lua lives in test/src/ (the standalone harness),
+  # not here — see the equivalent note in ../client/_index.yaml for why.

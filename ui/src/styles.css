@@ -41,6 +41,15 @@
 .st-count { font-size: 28px; font-weight: 700; }
 .st-count-label { font-size: 13px; color: var(--p-text-muted-color); }
 
+.st-caps {
+  list-style: none; margin: 14px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.st-caps li {
+  font-size: 13px; padding: 8px 12px; border-radius: 8px;
+  background: color-mix(in srgb, var(--p-content-border-color) 40%, transparent);
+}
+
 .st-state { padding: 8px 24px; font-size: 13px; color: var(--p-text-muted-color); }
 .st-error { color: var(--p-danger-color); }
 .st-retry {
