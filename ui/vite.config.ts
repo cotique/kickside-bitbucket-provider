@@ -38,7 +38,7 @@ export default defineConfig({
     target: 'esnext',
     lib: {
       entry: resolve(moduleRoot, 'src/index.ts'),
-      name: 'AcmeStarter',
+      name: 'CotiqueBitbucketProvider',
       fileName: 'index',
       formats: ['es'],
     },

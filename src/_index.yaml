@@ -1,144 +1,105 @@
 version: "1.0"
-namespace: acme.starter
+namespace: cotique.bitbucket_provider
 
 entries:
-  # acme.starter:definition
+  # cotique.bitbucket_provider:definition
   - name: definition
     kind: ns.definition
     meta:
-      title: Acme Starter
-      description: Starter module scaffold — a writable log sink published as an automation port, persisted rows, a status API, and a web-component page.
+      title: Bitbucket Connector
+      description: Bitbucket Cloud connector for Kickside Data Sync — a kickside.connection provider (app password or access token) plus a kickside.data:pullable source publishing a repository's pull requests as an automation port.
 
-  # acme.starter:dep.kickside.contract
+  # cotique.bitbucket_provider:dep.kickside.contract
   - version: "*"
     name: dep.kickside.contract
     kind: ns.dependency
     meta:
-      comment: Implements the shared writable store contract.
+      comment: Base contracts (kickside.contract:component/deletable, kickside.data:pullable) this module implements.
     component: kickside/contract
 
-  # acme.starter:dep.wippy.migration
+  # cotique.bitbucket_provider:dep.kickside.connection
   - version: "*"
-    name: dep.wippy.migration
+    name: dep.kickside.connection
     kind: ns.dependency
     meta:
-      comment: Migration framework for the log entries table.
-    component: wippy/migration
+      comment: kickside.connection:connection contract plus base_connection get_status/delete boilerplate.
+    component: kickside/connection
+
+  # cotique.bitbucket_provider:dep.kickside.component
+  - version: "*"
+    name: dep.kickside.component
+    kind: ns.dependency
+    meta:
+      comment: Component client library (get_private_context) used to read connection credentials.
+    component: kickside/component
 
   # ─── Dependency interface (ns.requirement) ───────────────────────────
-  - name: target_db
-    kind: ns.requirement
-    meta:
-      comment: Database resource for log entry rows and migrations.
-    default: app:db
-    targets:
-      - entry: acme.starter.migrations:01_create_log_entries
-        path: .meta.target_db
-
   - name: api_router
     kind: ns.requirement
     meta:
-      comment: HTTP router the starter endpoints attach to. Must enforce auth + endpoint_firewall.
+      comment: HTTP router the bitbucket-provider endpoints attach to. Must enforce auth + endpoint_firewall.
     default: app:api
     targets:
-      - entry: acme.starter.api:get_status.endpoint
+      - entry: cotique.bitbucket_provider.api:get_status.endpoint
         path: .meta.router
 
   - name: ui_server
     kind: ns.requirement
     meta:
-      comment: HTTP server the starter UI bundle is served from.
+      comment: HTTP server the bitbucket-provider UI bundle is served from.
     default: app:gateway
     targets:
-      - entry: acme.starter:ui_static
+      - entry: cotique.bitbucket_provider:ui_static
         path: .meta.server
 
-  # ─── Log sink (automation port + contract binding) ───────────────────
-  # acme.starter:log
-  - name: log
-    kind: registry.entry
-    meta:
-      type: kickside.automation.port
-      title: Starter Log
-      comment: Write each item to the runtime log.
-      icon: tabler:terminal-2
-    binding: acme.starter:log_sink
-    config_schema:
-      label:
-        type: string
-        title: Log label
-        description: Prefix stamped on every logged item.
-        default: LOG
-        picker: wc-schema-form
-    input_schema: |
-      { "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "content": { "type": "string", "description": "Item body to log." }
-        } }
-    operations:
-      upsert: {}
-
-  # acme.starter:log_sink
-  - name: log_sink
-    kind: contract.binding
-    meta:
-      title: Starter Log
-      comment: Persist and log each incoming item.
-      group: Starter
-      icon: tabler:terminal-2
-    contracts:
-      - contract: kickside.data:writable
-        methods:
-          write: acme.starter.sink:write
-
-  # ─── UI (the starter page as a Wippy web component) ──────────────────
+  # ─── UI (the bitbucket-provider page as a Wippy web component) ──────────────────
   # The module BUILDS (ui/), SHIPS (static/), and SERVES (its own http.static)
   # the page, exposed as a view.component the host mounts by tag.
   - name: ui_fs
     kind: fs.directory
     meta:
-      comment: Built starter web component bundle (from ui/).
+      comment: Built bitbucket-provider web component bundle (from ui/).
     directory: ./static
     auto_init: true
 
   - name: ui_static
     kind: http.static
     meta:
-      comment: Serves the starter web component bundle at /acme-starter.
+      comment: Serves the bitbucket-provider web component bundle at /cotique-bitbucket-provider.
       server: app:gateway
-    path: /acme-starter
-    fs: acme.starter:ui_fs
+    path: /cotique-bitbucket-provider
+    fs: cotique.bitbucket_provider:ui_fs
     options:
       mime_types:
         .js: application/javascript
         .css: text/css
         .map: application/json
 
-  - name: starter_view
+  - name: bitbucket_provider_view
     kind: registry.entry
     meta:
       type: view.component
-      title: Starter
+      title: Bitbucket Connector
       announced: true
       auto_register: true
-      tag_name: acme-starter
-      base_path: acme-starter
+      tag_name: cotique-bitbucket-provider
+      base_path: cotique-bitbucket-provider
       entry_point: index.js
       icon: tabler:terminal-2
-      description: Renders the acme/starter status view inside the Kickside shell, loads authenticated status data through the host proxy, and requires no caller-supplied props.
+      description: Renders the cotique/bitbucket-provider module status view inside the Kickside shell, loads authenticated status data through the host proxy, and requires no caller-supplied props.
       props: {}
 
   - name: nav_item
     kind: registry.entry
     meta:
       type: ui.nav_item
+      private: true
       section: ""
-      path: /starter
-      route_name: starter
-      title: Starter
-      comment: Log entries written through the starter sink.
+      path: /bitbucket-provider
+      route_name: bitbucket-provider
+      title: Bitbucket Connector
+      comment: Bitbucket Cloud connection and pull-request source module status. No standalone page — reachable only via Connections' Connect-app flow.
       icon: tabler:terminal-2
       order: 90
       render: component
-      component_tag: acme-starter
+      component_tag: cotique-bitbucket-provider

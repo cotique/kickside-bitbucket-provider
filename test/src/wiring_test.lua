@@ -1,19 +1,27 @@
--- Registry-shape test for the HTTP and UI surfaces. The harness does not call
--- its router or gateway, so the endpoint and web component are verified as
--- registry wiring: every entry exists and the cross-references line up.
+-- Registry-shape test for the module's contract bindings, automation port,
+-- HTTP/UI surfaces, and security policy. The standalone harness cannot open
+-- contracts under an actor/scope (see docs/kickside-development/
+-- 13-testing.md "Harness Limits"), so connection/source behavior is verified
+-- as registry wiring here; the underlying logic (normalization, pagination,
+-- redaction) is proven by the colocated *_test.lua suites next to their
+-- source.
 local test = require("test")
 local registry = require("registry")
 
-local NS = "acme.starter"
-local HANDLER_ID = "acme.starter.api:get_status"
-local ENDPOINT_ID = "acme.starter.api:get_status.endpoint"
-local VIEW_ID = "acme.starter:starter_view"
-local NAV_ID = "acme.starter:nav_item"
-local STATIC_ID = "acme.starter:ui_static"
-local FS_ID = "acme.starter:ui_fs"
-local POLICY_ID = "acme.starter.security:starter_endpoint_access"
-local BLOCK_ID = "acme.starter.blocks:block.write_log"
-local BLOCK_FN_ID = "acme.starter.blocks:block_write_log"
+local NS = "cotique.bitbucket_provider"
+local HANDLER_ID = "cotique.bitbucket_provider.api:get_status"
+local ENDPOINT_ID = "cotique.bitbucket_provider.api:get_status.endpoint"
+local VIEW_ID = "cotique.bitbucket_provider:bitbucket_provider_view"
+local NAV_ID = "cotique.bitbucket_provider:nav_item"
+local STATIC_ID = "cotique.bitbucket_provider:ui_static"
+local FS_ID = "cotique.bitbucket_provider:ui_fs"
+local POLICY_ID = "cotique.bitbucket_provider.security:bitbucket_provider_endpoint_access"
+
+local CONNECTION_ID = "cotique.bitbucket_provider.connection:bitbucket_connection"
+local SOURCE_BINDING_ID = "cotique.bitbucket_provider.source:repo_pulls_source"
+local SOURCE_PORT_ID = "cotique.bitbucket_provider.source:repo_pulls"
+local PULL_ITEMS_ID = "cotique.bitbucket_provider.source:pull_items"
+local PULL_KEYS_ID = "cotique.bitbucket_provider.source:pull_keys"
 
 local function get(id)
     local entry, err = registry.get(id)
@@ -42,20 +50,20 @@ local function qualify(ref, ns)
 end
 
 local function define_tests()
-    test.describe("acme.starter surface wiring", function()
+    test.describe("cotique.bitbucket_provider surface wiring", function()
         test.it("pairs the status endpoint with its handler on the router token", function()
             get(HANDLER_ID)
             local ep = data_of(get(ENDPOINT_ID))
-            test.eq(qualify(ep.func, "acme.starter.api"), HANDLER_ID)
+            test.eq(qualify(ep.func, "cotique.bitbucket_provider.api"), HANDLER_ID)
             test.eq(ep.method, "GET")
-            test.eq(ep.path, "/starter/status")
+            test.eq(ep.path, "/bitbucket-provider/status")
             test.eq(meta_of(get(ENDPOINT_ID)).router, "app:api")
         end)
 
         test.it("declares a view served by the module's own static mount", function()
             local view = meta_of(get(VIEW_ID))
             test.eq(view.type, "view.component")
-            test.eq(view.tag_name, "acme-starter")
+            test.eq(view.tag_name, "cotique-bitbucket-provider")
             test.eq(view.entry_point, "index.js")
             test.eq(view.announced, true)
             test.eq(view.auto_register, true)
@@ -69,23 +77,9 @@ local function define_tests()
         test.it("mounts the view in the app nav by tag", function()
             local nav = meta_of(get(NAV_ID))
             test.eq(nav.type, "ui.nav_item")
-            test.eq(nav.path, "/starter")
+            test.eq(nav.path, "/bitbucket-provider")
             test.eq(nav.render, "component")
             test.eq(nav.component_tag, meta_of(get(VIEW_ID)).tag_name)
-        end)
-
-        test.it("contributes the write-log Block backed by its implementation function", function()
-            local block = get(BLOCK_ID)
-            test.eq(meta_of(block).type, "kickside.block")
-            local decl = data_of(block).block
-            test.not_nil(decl, "block declaration must live in data.block")
-            test.eq(decl.api_version, "kickside.block/v1")
-            test.eq(decl.execution.kind, "function")
-            test.eq(decl.execution.function_id, BLOCK_FN_ID)
-            test.not_nil(decl.input, "block must declare an input schema")
-            test.not_nil(decl.output, "block must declare an output schema")
-            test.not_nil(decl.error, "a failed port requires an error schema")
-            get(BLOCK_FN_ID)
         end)
 
         test.it("gates the api namespace behind the injectable access policy", function()
@@ -95,9 +89,51 @@ local function define_tests()
             if type(resources) == "string" then resources = { resources } end
             local covered = false
             for _, r in ipairs(resources) do
-                if r == "acme.starter.api:*" then covered = true end
+                if r == "cotique.bitbucket_provider.api:*" then covered = true end
             end
-            test.is_true(covered, "policy must cover acme.starter.api:*")
+            test.is_true(covered, "policy must cover cotique.bitbucket_provider.api:*")
+        end)
+
+        test.it("declares the Bitbucket connection provider binding with a credential_schema", function()
+            local conn = get(CONNECTION_ID)
+            test.eq(conn.kind, "contract.binding")
+            local m = meta_of(conn)
+            test.eq(m.provider, "bitbucket")
+            test.not_nil(m.credential_schema, "connection binding must declare a credential_schema")
+            test.not_nil(m.credential_schema.fields, "credential_schema must declare fields")
+
+            local has_access_token = false
+            for _, f in ipairs(m.credential_schema.fields) do
+                if f.key == "access_token" then has_access_token = true end
+            end
+            test.is_true(has_access_token, "credential_schema must declare the access_token field")
+        end)
+
+        test.it("wires the get_status/test_connection/discover_resources/delete function entries", function()
+            get("cotique.bitbucket_provider.connection:get_status")
+            get("cotique.bitbucket_provider.connection:delete")
+            get("cotique.bitbucket_provider.connection:test_connection")
+            get("cotique.bitbucket_provider.connection:discover_resources")
+        end)
+
+        test.it("declares the pull request source binding implementing kickside.data:pullable", function()
+            local source = get(SOURCE_BINDING_ID)
+            test.eq(source.kind, "contract.binding")
+            get(PULL_ITEMS_ID)
+            get(PULL_KEYS_ID)
+        end)
+
+        test.it("publishes the pull request source as an automation port bound to the source binding", function()
+            local port = get(SOURCE_PORT_ID)
+            local m = meta_of(port)
+            test.eq(m.type, "kickside.automation.port")
+            local d = data_of(port)
+            test.eq(qualify(d.binding, NS .. ".source"), SOURCE_BINDING_ID)
+            test.not_nil(d.config_schema, "port must declare a config_schema")
+            test.not_nil(d.config_schema.workspace, "port config_schema must let the user select a workspace")
+            test.not_nil(d.config_schema.repo_slug, "port config_schema must let the user select a repository")
+            test.not_nil(d.output_schema, "port must declare an output_schema")
+            test.not_nil(d.operations, "port must declare its operations")
         end)
     end)
 end

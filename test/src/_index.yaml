@@ -1,41 +1,34 @@
 version: "1.0"
 namespace: app
 
-# Standalone harness for acme/starter. Provides the host resources the boot
+# Standalone harness for cotique/bitbucket-provider. Provides the host resources the boot
 # needs (app:db, app:processes, gateway + api router, env storage, a
 # permissive actor scope) and wires them through wippy/bootloader so the
 # co-located *_test.lua suites run in isolation. The router and gateway exist
 # only so the endpoint and static entries resolve; the HTTP and UI surfaces
 # are covered by the registry-shape suite, not exercised over HTTP.
+#
+# This module owns no SQL tables of its own (no migrations — the
+# kickside.data:pullable contract's own doc comment: "Engine owns cursor,
+# lease, schedule, dedup, id-map, and sink routing"). app:db is still
+# provided because the transitive kickside/component and kickside/connection
+# dependencies need a database for component storage.
+#
 # Harness-only; excluded from publish via the module wippy.yaml.
 
 entries:
   - name: definition
     kind: ns.definition
-    meta: { title: Starter Test Harness }
+    meta: { title: Bitbucket Connector Test Harness }
 
   - name: wait_for_boot
     kind: function.lua
     meta:
       type: test
       suite: "00_setup"
-      comment: Waits for the acme_starter_log_entries migration to land on app:db before the suites run.
+      comment: Waits for the module's own registry entries to be live before the suites run.
     source: file://wait_for_boot.lua
-    modules: [sql, time]
-    method: run
-
-  - name: log_test
-    kind: function.lua
-    meta:
-      type: test
-      comment: Log sink publishes its port, persists rows, and acknowledges writes.
-      group: Acme Starter
-      suite: acme_starter
-    source: file://log_test.lua
-    modules: [funcs, registry, security]
-    imports:
-      test: wippy.test:test
-      repo: acme.starter.persist:repo
+    modules: [registry, time]
     method: run
 
   - name: wiring_test
@@ -43,18 +36,101 @@ entries:
     meta:
       type: test
       comment: Endpoint, view, nav, and security entries exist and reference each other consistently.
-      group: Acme Starter
-      suite: acme_starter
+      group: Bitbucket Connector
+      suite: cotique_bitbucket_provider
     source: file://wiring_test.lua
     modules: [registry]
     imports:
       test: wippy.test:test
     method: run
 
+  # ─── Colocated logic tests for the module under test ──────────────────
+  # These live here, not next to their source in ../../src/, because this
+  # module's own wippy.yaml declares exclude_meta.type: [test] — a rule that
+  # is applied even through the workspace replacement below, so a
+  # meta.type: test entry registered inside src/**/_index.yaml never reaches
+  # the registry this harness's `wippy test` run sees at all (confirmed
+  # empirically during this build — see BUILD-NOTES.md). This mirrors the
+  # original template's own test/src/log_test.lua, which used the identical
+  # shape (test file in the harness, importing the production entry by id).
+
+  - name: output_test
+    kind: function.lua
+    meta:
+      type: test
+      suite: cotique_bitbucket_provider
+      group: Bitbucket Connector
+      comment: client:output redacts credential-shaped fields.
+    source: file://output_test.lua
+    imports:
+      test: wippy.test:test
+      output: cotique.bitbucket_provider.client:output
+    method: run
+
+  - name: data_error_test
+    kind: function.lua
+    meta:
+      type: test
+      suite: cotique_bitbucket_provider
+      group: Bitbucket Connector
+      comment: client:data_error maps HTTP/transport failures onto the DataError envelope.
+    source: file://data_error_test.lua
+    imports:
+      test: wippy.test:test
+      data_error: cotique.bitbucket_provider.client:data_error
+    method: run
+
+  - name: transport_test
+    kind: function.lua
+    meta:
+      type: test
+      suite: cotique_bitbucket_provider
+      group: Bitbucket Connector
+      comment: client:transport resolves the correct auth mode from a credentials table.
+    source: file://transport_test.lua
+    imports:
+      test: wippy.test:test
+      transport: cotique.bitbucket_provider.client:transport
+    method: run
+
+  - name: discover_resources_test
+    kind: function.lua
+    meta:
+      type: test
+      suite: cotique_bitbucket_provider
+      group: Bitbucket Connector
+      comment: discover_resources normalizes a Bitbucket repository to the exact discover_resources shape.
+    source: file://discover_resources_test.lua
+    imports:
+      test: wippy.test:test
+      discover_resources: cotique.bitbucket_provider.connection:discover_resources
+    method: run
+
+  - name: pullable_conformance
+    kind: library.lua
+    meta:
+      comment: Harness-local copy of kickside.automation.testing:pullable_conformance for provider source conformance tests (verbatim from providers-master\providers-master\atlassian\test\pullable_conformance.lua, see BUILD-NOTES.md).
+    source: file://pullable_conformance.lua
+    modules: [registry, json]
+
+  - name: pull_core_test
+    kind: function.lua
+    meta:
+      type: test
+      suite: cotique_bitbucket_provider
+      group: Bitbucket Connector
+      comment: pull_core normalizes items, walks pagination, builds the pullable envelope, and passes the real pullable_conformance kit — all against a fake client/transport, with no network calls.
+    source: file://pull_core_test.lua
+    imports:
+      test: wippy.test:test
+      pull_core: cotique.bitbucket_provider.source:pull_core
+      conformance: app:pullable_conformance
+    method: run
+
   - name: db
     kind: db.sql.sqlite
     meta:
-      comment: In-memory database for the starter suites.
+      comment: In-memory database for the bitbucket-provider suites.
     file: ":memory:"
 
   - name: env_storage
@@ -93,41 +169,135 @@ entries:
       effect: allow
 
   # The harness source is the lock root. Its .wippy.yaml replaces the declared
-  # acme/starter dependency with ../ so the module's canonical source and
+  # cotique/bitbucket-provider dependency with ../ so the module's canonical source and
   # colocated tests load directly without a lock-file replacement.
 
-  - name: starter_harness.dep.migration
+  - name: bitbucket_provider_harness.dep.contract
     version: "*"
     kind: ns.dependency
     meta:
-      comment: Host binding for the migration dependency used by the module under test.
-    component: "wippy/migration"
-    parameters:
-      - name: wippy.migration:app_db
-        value: app:db
-
-  - name: starter_harness.dep.contract
-    version: "*"
-    kind: ns.dependency
-    meta:
-      comment: Shared contract definitions imported by the replacement module under test.
+      comment: Shared contract definitions (kickside.contract:*, kickside.data:pullable) imported by the replacement module under test.
     component: "kickside/contract"
 
-  - name: starter_harness.dep.security
+  - name: bitbucket_provider_harness.dep.security
     version: "*"
     kind: ns.dependency
     meta:
       comment: Platform security groups (wippy.security:process) that give host-managed services their policy scope under strict mode.
     component: "wippy/security"
 
-  - name: starter_harness.dep.bootloader
+  - name: bitbucket_provider_harness.dep.bootloader
     version: "*"
     kind: ns.dependency
     meta:
-      comment: Host wiring for the standalone test harness.
+      comment: Host wiring for the standalone test harness. Requirement ids below were discovered iteratively per docs/kickside-development/13-testing.md "Harness Limits" — run wippy test, wire the slot behind each "parameter not found"/"router metadata is required" error, repeat until boot passes.
     component: "wippy/bootloader"
     parameters:
       - name: wippy.bootloader:application_host
         value: app:processes
       - name: wippy.bootloader:env_storage
         value: app:env_storage
+      - name: kickside.component:api_router
+        value: app:api
+      - name: kickside.component:target_db
+        value: app:db
+      - name: kickside.component.security:user_security_scope
+        value: app:user
+      - name: kickside.connection:api_router
+        value: app:api
+      - name: kickside.connection:ui_server
+        value: app:gateway
+      - name: kickside.connection.security:user_security_scope
+        value: app:user
+      - name: kickside.core:target_db
+        value: app:db
+      - name: kickside.core.security:user_security_scope
+        value: app:user
+      - name: kickside.core.jobs:api_router
+        value: app:api
+      - name: kickside.core.jobs:process_host
+        value: app:processes
+      - name: kickside.core.jobs:target_db
+        value: app:db
+      - name: kickside.core.jobs.security:user_security_scope
+        value: app:user
+      - name: kickside.core.projections:api_router
+        value: app:api
+      - name: kickside.core.projections:env_storage
+        value: app.env:store
+      - name: kickside.core.projections:process_host
+        value: app:processes
+      - name: kickside.core.retention:api_router
+        value: app:api
+      - name: kickside.core.retention:env_storage
+        value: app.env:store
+      - name: kickside.core.retention:process_host
+        value: app:processes
+      - name: kickside.core.retention:user_security_scope
+        value: app:user
+      - name: kickside.core.scheduler:env_storage
+        value: app.env:store
+      - name: kickside.core.scheduler:process_host
+        value: app:processes
+      - name: kickside.core.threads:api_router
+        value: app:api
+      - name: kickside.core.threads:process_host
+        value: app:processes
+      - name: kickside.core.threads:user_security_scope
+        value: app:user
+      - name: kickside.core.threads.hydration:api_router
+        value: app:api
+      - name: kickside.core.threads.hydration:user_security_scope
+        value: app:user
+      - name: kickside.core.lifecycle:process_host
+        value: app:processes
+      - name: kickside.uploads:api_router
+        value: app:api
+      - name: kickside.uploads:ui_server
+        value: app:gateway
+      - name: kickside.uploads:database_resource
+        value: app:db
+      - name: kickside.uploads:env_storage
+        value: app.env:store
+      - name: kickside.uploads.security:user_security_scope
+        value: app:user
+      - name: wippy.llm:env_storage
+        value: app.env:store
+      - name: wippy.llm:process_host
+        value: app:processes
+      - name: wippy.session:api_router
+        value: app:api
+      - name: wippy.session:database_resource
+        value: app:db
+      - name: wippy.session:env_storage
+        value: app.env:store
+      - name: wippy.session:default_host
+        value: app:processes
+      - name: wippy.views:api_router
+        value: app:api
+      - name: wippy.views:env_storage
+        value: app.env:store
+      - name: wippy.views:server
+        value: app:gateway
+      - name: wippy.migration:app_db
+        value: app:db
+
+  # Declared explicitly (rather than relying purely on the .wippy.yaml
+  # workspace replacement to surface it) so its own user_security_scope
+  # requirement resolves through the same ns.dependency `parameters:`
+  # pipeline stage as every other harness dependency above. A raw
+  # .wippy.yaml path override targeting an entry inside a workspace-replaced
+  # module ("cotique.bitbucket_provider.security:user_security_scope:data.default")
+  # stopped resolving under wippy runtime v0.3.35a+ — "no entry found" at
+  # the override stage — even though `parameters:` on a declared
+  # ns.dependency for the exact same entry resolves fine. Same fix as
+  # cotique/career-kickside; see that repo's docs/FINDINGS.md.
+  - name: bitbucket_provider_harness.dep.module
+    version: "*"
+    kind: ns.dependency
+    meta:
+      comment: The module under test itself — workspace-replaced by test/.wippy.yaml, declared here only so its own user_security_scope requirement can be wired via `parameters:`.
+    component: "cotique/bitbucket-provider"
+    parameters:
+      - name: cotique.bitbucket_provider.security:user_security_scope
+        value: app:user

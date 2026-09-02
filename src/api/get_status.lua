@@ -1,9 +1,12 @@
--- GET /starter/status — module identity plus the number of persisted log
--- entries. Authn is enforced by the router (token_auth + endpoint_firewall);
--- the actor check keeps direct invocations honest.
+-- GET /bitbucket-provider/status — static module identity for the UI page.
+-- This module owns no SQL storage of its own (kickside.data:pullable's own
+-- doc comment: "Engine owns cursor, lease, schedule, dedup, id-map, and sink
+-- routing"), so there is no row count to report; get_status returns a fixed
+-- identity/capability snapshot instead. Authn is enforced by the router
+-- (token_auth + endpoint_firewall); the actor check keeps direct
+-- invocations honest.
 local http = require("http")
 local security = require("security")
-local repo = require("repo")
 
 local function handler()
     local res = http.response()
@@ -18,15 +21,13 @@ local function handler()
         return
     end
 
-    local count, err = repo.count()
-    if err then
-        res:set_status(http.STATUS.INTERNAL_ERROR)
-        res:write_json({ success = false, error = "log entry count: " .. tostring(err) })
-        return
-    end
-
     res:set_status(http.STATUS.OK)
-    res:write_json({ success = true, module = "acme/starter", count = count })
+    res:write_json({
+        success = true,
+        module = "cotique/bitbucket-provider",
+        status = "ok",
+        capabilities = { "connection", "pull_requests_source" },
+    })
 end
 
 return { handler = handler }

@@ -1,19 +1,17 @@
-local sql = require("sql")
+local registry = require("registry")
 local time = require("time")
 
--- Wait for the bootloader to migrate app:db before the suites run; the module
--- owns acme_starter_log_entries, so its presence proves the migration applied.
+-- This module owns no SQL tables, so there is no migration to poll for.
+-- Instead, wait for the module's own connection binding entry to be live in
+-- the registry before the suites run — a proxy for "the workspace
+-- replacement finished loading and the dependency graph resolved".
 local function run()
     for _ = 1, 300 do
-        local db, err = sql.get("app:db")
-        if not err and db then
-            local _, qerr = db:query("SELECT COUNT(*) FROM acme_starter_log_entries")
-            db:release()
-            if not qerr then return true end
-        end
+        local entry, err = registry.get("cotique.bitbucket_provider.connection:bitbucket_connection")
+        if not err and entry then return true end
         time.sleep("100ms")
     end
-    error("acme_starter_log_entries did not come online within 30s")
+    error("cotique.bitbucket_provider.connection:bitbucket_connection did not register within 30s")
 end
 
 return { run = run }

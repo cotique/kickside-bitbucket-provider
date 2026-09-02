@@ -1,0 +1,164 @@
+version: "1.0"
+namespace: cotique.bitbucket_provider.source
+
+entries:
+  # cotique.bitbucket_provider.source:pull_core
+  - name: pull_core
+    kind: library.lua
+    meta:
+      comment: Bitbucket Cloud pull-request fetch, pagination, normalization, and the kickside.data:pullable envelope (pull/pull_keys). Envelope shape CONFIRMED against the real kickside/providers monorepo source, see BUILD-NOTES.md.
+    source: file://pull_core.lua
+    modules:
+      - ctx
+    imports:
+      types: cotique.bitbucket_provider.client:types
+      data_error: cotique.bitbucket_provider.client:data_error
+      transport: cotique.bitbucket_provider.client:transport
+
+  # cotique.bitbucket_provider.source:pull_items
+  - name: pull_items
+    kind: function.lua
+    meta:
+      comment: kickside.data:pullable.pull for Bitbucket Cloud pull requests. Thin pass-through to pull_core.pull — see pull_core.lua header and BUILD-NOTES.md.
+    source: file://pull.lua
+    imports:
+      pull_core: cotique.bitbucket_provider.source:pull_core
+    method: pull
+
+  # cotique.bitbucket_provider.source:pull_keys
+  - name: pull_keys
+    kind: function.lua
+    meta:
+      comment: Keys-only Bitbucket Cloud pull request listing used by Data Sync reconcile (wired via the repo_pulls automation port's reconcile.pull_keys field below, not a second kickside.data:pullable method). Thin pass-through to pull_core.pull_keys.
+    source: file://pull.lua
+    imports:
+      pull_core: cotique.bitbucket_provider.source:pull_core
+    method: pull_keys
+
+  # cotique.bitbucket_provider.source:repo_pulls_source
+  # Implements kickside.data:pullable for a selected repository's pull
+  # requests. context_required: [component_id] follows the same pattern the
+  # connection binding uses — the engine opens this binding with the
+  # connection component as context so pull() can resolve credentials via
+  # ctx.get("component_id"), per docs/kickside-development/
+  # 05-knowledge-uploads-automation-inbox.md ("the pullable source opens
+  # with the connection as component_id context").
+  #
+  # CONFIRMED, both live against the real kickside.data:pullable contract
+  # definition (booted in the standalone test harness — see BUILD-NOTES.md)
+  # and now against the real kickside/github and kickside/atlassian source
+  # (providers-master\providers-master\github\src\source\_index.yaml and
+  # ...\atlassian\src\jira\source\_index.yaml, local unpacked copies of
+  # git.wippy.ai/kickside/providers): the contract accepts only ONE bound
+  # method, `pull`. Binding `pull_keys` here as a second kickside.data:pullable
+  # method is REJECTED at registry-commit time with "bound method is not
+  # defined in contract definition" — confirmed correct, not a guess.
+  # `pull_keys` is instead wired through the `repo_pulls` automation port's
+  # `reconcile.pull_keys` field below — the real mechanism Data Sync's
+  # reconcile path uses, per both real reference source/_index.yaml files.
+  - name: repo_pulls_source
+    kind: contract.binding
+    meta:
+      title: Bitbucket Pull Requests
+      comment: Pull requests from a selected Bitbucket Cloud repository.
+      group: Developer
+      icon: tabler:brand-bitbucket
+      provider: bitbucket
+      class:
+        - kickside.code
+    contracts:
+      - contract: kickside.data:pullable
+        context_required: [component_id]
+        methods:
+          pull: cotique.bitbucket_provider.source:pull_items
+
+  # cotique.bitbucket_provider.source:repo_pulls
+  # Automation port shape (config_schema/operations/reconcile) — CONFIRMED
+  # against the real kickside/github port declaration
+  # (providers-master\providers-master\github\src\source\_index.yaml, local
+  # unpacked copy of git.wippy.ai/kickside/providers, see BUILD-NOTES.md
+  # "RESOLVED: kickside.data:pullable envelope"). `reconcile.pull_keys` is
+  # the real mechanism Data Sync's reconcile path reaches a keys-only
+  # listing through — a sibling field to `binding:`, not a second bound
+  # kickside.data:pullable method (that contract binds only `pull`, see
+  # repo_pulls_source above). `config_schema.connection_id` is the real
+  # port's connection-picker field shape, added here alongside this port's
+  # own pre-existing workspace/repo_slug/state/pagelen fields.
+  - name: repo_pulls
+    kind: registry.entry
+    meta:
+      type: kickside.automation.port
+      title: Bitbucket Pull Requests
+      comment: Read pull requests from a selected Bitbucket Cloud repository.
+      icon: tabler:brand-bitbucket
+    binding: cotique.bitbucket_provider.source:repo_pulls_source
+    reconcile:
+      pull_keys: cotique.bitbucket_provider.source:pull_keys
+    config_schema:
+      connection_id:
+        picker: kickside-connection-trait-picker
+        role: primary
+        required: true
+        provider: bitbucket
+      workspace:
+        type: string
+        title: Workspace
+        description: Bitbucket workspace slug that owns the repository (the first segment of its full_name, e.g. "acme" in "acme/my-repo").
+        picker: wc-schema-form
+      repo_slug:
+        type: string
+        title: Repository
+        description: Repository slug within the workspace (the second segment of its full_name, e.g. "my-repo" in "acme/my-repo").
+        picker: wc-schema-form
+      state:
+        type: string
+        title: Pull request state filter
+        description: Optional Bitbucket state filter (OPEN, MERGED, DECLINED, SUPERSEDED). Leave empty to use Bitbucket's own default, which returns open pull requests only (verified empirically, see BUILD-NOTES.md).
+        picker: wc-schema-form
+      pagelen:
+        type: number
+        title: Page size
+        description: Pull requests fetched per page (Bitbucket's own default/max is 50).
+        default: 50
+        picker: wc-schema-form
+    # Describes the FULL pullable item envelope M.pull actually emits
+    # (item_key/dedup_key/op/source_version/occurred_at/payload), not just
+    # the payload's own fields — matching the real
+    # kickside.atlassian.jira.source:issues port's output_schema shape
+    # (providers-master\providers-master\atlassian\src\jira\source\_index.yaml,
+    # local unpacked copy of git.wippy.ai/kickside/providers). The previous
+    # version of this schema described only the payload fields, missing the
+    # envelope wrapper — fixed here for consistency with the real reference.
+    output_schema: |
+      { "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "item_key": { "type": "string", "description": "Stable item identity, bitbucket:<workspace>/<repo_slug>:pr:<id>." },
+          "dedup_key": { "type": "string", "description": "Delivery idempotency key including op and source_version." },
+          "op": { "type": "string", "enum": ["upsert"] },
+          "source_version": { "type": ["string", "null"], "description": "Bitbucket updated_on/created_on timestamp used for ordering and deduplication." },
+          "occurred_at": { "type": ["string", "null"] },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "id": { "type": ["string", "null"], "description": "Provider-native pull request id." },
+              "title": { "type": "string" },
+              "state": { "type": "string", "enum": ["open", "merged", "closed", "declined"] },
+              "author": { "type": ["string", "null"] },
+              "source_branch": { "type": ["string", "null"] },
+              "target_branch": { "type": ["string", "null"] },
+              "created_at": { "type": ["string", "null"] },
+              "updated_at": { "type": ["string", "null"] },
+              "merged_at": { "type": ["string", "null"] },
+              "source_url": { "type": ["string", "null"] },
+              "raw": { "type": "object", "description": "Original Bitbucket API item, untouched." }
+            },
+            "required": ["title", "state"]
+          }
+        },
+        "required": ["item_key", "dedup_key", "op"] }
+    operations:
+      pull: {}
+
+  # pull_core_test.lua lives in test/src/ (the standalone harness), not
+  # here — see the equivalent note in ../client/_index.yaml for why.
