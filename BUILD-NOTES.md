@@ -13,10 +13,27 @@ requests as an automation port. Read alongside `README.md` and
       `https://github.com/cotique/bitbucket-provider` to the real
       `https://github.com/cotique/kickside-bitbucket-provider`.
 - [x] `src/` implements the connection + source structure below.
-- [x] `test/` — colocated-logic tests + harness registry-shape test,
-      `make verify` passes clean end to end (41/41 tests on SQLite and the
-      shared Postgres instance) — see "RESOLVED: pre-existing lint errors
-      in a transitive platform dependency" below for the Makefile fix this
+- [x] `test/` — colocated-logic tests + harness registry-shape test +
+      the real `pullable_conformance` kit, `make verify` passes clean end
+      to end (56/56 tests on SQLite, re-verified after the
+      `kickside.data:pullable` envelope correction pass — see "RESOLVED:
+      `kickside.data:pullable` request/response shape" above).
+      `make test-pg` (the shared Postgres profile) was **not** re-run in
+      that same pass: this machine's host port 5433 — the port
+      `test/.wippy.yaml`'s `postgres` profile and `compose.test.yaml` both
+      hardcode for the shared Postgres convention — was occupied by an
+      unrelated, already-running `job-search-ai-postgres-1` container
+      (a different local project's own dev database, not part of this
+      module or its dependency graph). Freeing that port means stopping
+      someone else's running container, which is outside what this session
+      is authorized to do unilaterally — flagged for the user rather than
+      forced. `make test-pg` needs a re-run once port 5433 is free to
+      confirm parity with the SQLite result above; nothing in this pass's
+      changes is Postgres-specific (no migrations, no SQL — this module
+      owns no tables), so no divergence is expected, but it is unconfirmed
+      as of this note.
+      See "RESOLVED: pre-existing lint errors
+      in a transitive platform dependency" below for the earlier Makefile fix this
       needed.
 - [x] `BUILD-NOTES.md` (this file).
 - [x] Local commit, no push.
@@ -49,8 +66,9 @@ src/
     discover_resources.lua   live GET /repositories?role=member, normalized
     _index.yaml               bitbucket_connection contract.binding + credential_schema
   source/
-    pull_core.lua            fetch_page/list_all/normalize_item/normalize_key — fully tested
-    pull.lua                 pull()/pull_keys() — thin kickside.data:pullable wrappers
+    pull_core.lua            fetch_page/list_all/normalize_item/normalize_key plus the
+                              confirmed kickside.data:pullable envelope (pull/pull_keys)
+    pull.lua                 pull()/pull_keys() — thin pass-through to pull_core
     _index.yaml               repo_pulls_source contract.binding + repo_pulls automation port
 ui/                          kept from the template, adjusted to the new static status shape
 test/
@@ -84,9 +102,93 @@ lease, schedule, dedup, id-map, and sink routing"); `ui/src/types.ts` and
   text tells the user to scope the token/app password to
   `Repositories: Read` + `Pull requests: Read` only.
 
-## OPEN: `kickside.data:pullable` request/response shape
+## RESOLVED: `kickside.data:pullable` request/response shape
 
-**Partially resolved during this build — new, confirmed information below.**
+**Fully resolved in a follow-up pass.** Real, unpacked source for
+`git.wippy.ai/kickside/providers` became available locally at
+`providers-master\providers-master\` (outside this repo). The envelope
+previously inferred by analogy below has been read directly against two
+real implementations of this exact contract and corrected where it was
+wrong:
+
+- `providers-master\providers-master\github\src\source\pull_core.lua`
+- `providers-master\providers-master\atlassian\src\jira\source\pull_core.lua`
+- `providers-master\providers-master\github\src\source\_index.yaml`
+- `providers-master\providers-master\github\src\client\data_error.lua`
+- `providers-master\providers-master\github\src\source\pull_core_test.lua`
+- `providers-master\providers-master\atlassian\src\jira\source\pull_core_test.lua`
+- `providers-master\providers-master\atlassian\test\pullable_conformance.lua`
+  and `...\atlassian\test\_index.yaml`
+
+Confirmed wrong and fixed, concretely:
+
+1. **Items were flat, must be wrapped.** Every pulled item is now
+   `{ item_key, dedup_key, op = "upsert", source_version, occurred_at,
+   payload = <normalized item> }`, not the bare normalized item this module
+   previously returned directly. See `source/pull_core.lua`'s
+   `M.normalize_item`/`M.normalize_key`.
+2. **Cursor must be a table, never a bare string, and never nil on
+   success.** `source/pull_core.lua`'s `M.pull`/`M.pull_keys` now wrap
+   Bitbucket's own literal `next` URL as `{ next_url = <string|nil> }`.
+   `next_cursor` is set on every successful response — on exhaustion it
+   resets to `{ next_url = nil }` (start over from page 1) instead of going
+   nil, matching both real examples' "reset to a fresh resumable position
+   so a scheduler can keep polling forever" behavior. This connector does
+   not yet honor `backfill_since` as a continuation filter (no verified
+   Bitbucket query filter for it — resetting to page 1 means a full rescan
+   each cycle, a real but disclosed inefficiency, not a silent gap); the
+   conformance test below declares this explicitly
+   (`backfill_since = { mode = "ignored", reason = ... }`).
+3. **`url` renamed to `source_url`** in the payload, matching the platform
+   convention confirmed in both real reference files
+   (`source/_index.yaml`'s `output_schema` updated to match).
+4. **`client/data_error.lua` rewritten** to the real taxonomy from
+   `providers-master\providers-master\github\src\client\data_error.lua`:
+   same function names (`M.failure`/`M.connection`/`M.invalid_config`/
+   `M.from_result`), same full pullable-envelope return shape, same code
+   vocabulary (`auth_expired`, `invalid_config`, `permission_denied`,
+   `not_found`, `rate_limited`, `provider_unavailable`, `provider_error`),
+   replacing the previously-inferred vocabulary
+   (`auth_failed`/`forbidden`/`unknown_error`/`invalid_request`). One
+   deliberate deviation, documented in the file itself: `client/api.lua`
+   (out of scope for this fix, independently confirmed correct) follows a
+   `(decoded, err)` two-value Lua convention where `err` is a *bare*
+   `{code,message,retriable,scope}` record, not a `{success=false,
+   error=...}` envelope — `connection/test_connection.lua` and
+   `connection/discover_resources.lua` (also out of scope) read
+   `err.message` directly off that bare record and must keep working
+   unchanged. `M.new`/`M.from_http`/`M.from_transport` are kept, under
+   their original names, as this connector's own bare-record builders
+   (`M.new(...)` is exactly `M.failure(...).error`) so `client/api.lua`
+   needed zero call-site changes; `source/pull_core.lua`'s `M.pull`/
+   `M.pull_keys` use the real `M.connection`/`M.invalid_config`/
+   `M.from_result` functions directly and return their result AS the
+   pullable envelope response, exactly like the real github/jira
+   `pull_core.lua`.
+5. **`pull_keys` reconcile wiring found.** See "RESOLVED: `pull_keys`
+   reconcile wiring" below — this was the one open question the previous
+   pass genuinely couldn't answer without real source.
+6. **Conformance test kit added.** `test/src/pullable_conformance.lua` is a
+   verbatim copy of
+   `providers-master\providers-master\atlassian\test\pullable_conformance.lua`
+   (a generic, provider-agnostic checker — not adapted), registered in
+   `test/src/_index.yaml` exactly like `...\atlassian\test\_index.yaml`
+   does. `test/src/pull_core_test.lua`'s "passes the pullable conformance
+   kit offline" case calls `registry.get("kickside.data:pullable")` at test
+   time to validate this connector's actual `pull`/`pull_keys` output
+   against the real, live JSON schema — the definitive check, not
+   inspection-by-analogy. It passes (see `make test`/`make test-pg` output).
+7. **`component_id` resolution fallback chain added.** `source/pull_core.lua`'s
+   `resolve()` now tries `deps.component_id` -> `ctx.get("component_id")` ->
+   `config.connection_id`, matching both real reference `pull_core.lua`
+   files exactly (previously this module only tried `ctx.get`).
+8. **`config_schema.connection_id` added** to the `repo_pulls` automation
+   port, matching the real `kickside.github.source:repo_items` port's
+   `connection_id` field shape (`kickside-connection-trait-picker`,
+   `role: primary`, `required: true`, `provider: bitbucket`).
+
+Below is the original build's account of what was confirmed and still
+inferred at the time, kept for the historical record.
 
 We do not have access to `kickside.data:pullable`'s real Lua source. The
 reference module `kickside/github` is a packed Hub module — `wippy registry
@@ -130,14 +232,11 @@ to inspect its registry shape, then removed — see below).
   `pull`; `pull_keys` (`source/pull.lua`'s second exported function) is kept
   as a plain, unbound registered entry for structural parity with
   `kickside/github`, but nothing calls it through the pullable contract.
-  **Still open:** exactly how Data Sync's reconcile path is meant to reach a
-  keys-only listing (a naming convention on the entry id, a second field on
-  the `kickside.automation.port` entry, folding a `keys_only`/`mode` flag
-  into the single `pull` request instead — genuinely unknown). Whoever
-  resolves this should also revisit whether `pull_keys` is a real dead
-  end (delete it) or the reconcile mechanism becomes clear (wire it
-  properly) — do not leave it a copy-pasted-but-unreachable entry
-  indefinitely.
+  **No longer open — see "RESOLVED: `pull_keys` reconcile wiring" below:**
+  Data Sync's reconcile path reaches a keys-only listing via a `reconcile:`
+  field sibling to `binding:` on the `kickside.automation.port` registry
+  entry (`repo_pulls` in `source/_index.yaml`), confirmed against the real
+  `providers-master\providers-master\github\src\source\_index.yaml`.
   `kickside.data:data_connector_manifest_schema` (a JSON-Schema
   `registry.entry`, visible even though the module is packed — its
   `meta.json_schema` is plain data, not Lua) describes a *different*,
@@ -147,26 +246,47 @@ to inspect its registry shape, then removed — see below).
   registration path for a different family of connectors; it does not
   resolve the `pull_keys` question and was not adopted here since
   `kickside/github` itself doesn't use it.
-- **Still inferred, not confirmed:** the request/response envelope of the
-  one confirmed method, `pull` itself — request `{ config, cursor }`,
-  success `{ success = true, items, next_cursor, has_more }`, failure
-  `{ success = false, error = { code, message, retriable, scope } }`. This
-  is inferred by analogy to the real, verified `kickside.data:writable.write`
-  envelope (the template's own `src/sink/write.lua` before this module
-  removed the demo sink; the failure shape is confirmed generic across
-  `kickside.data:*` per `docs/kickside-development/02-contracts-and-ports.md`).
-  A large, impossible-to-miss comment sits directly above `pull()`/
-  `pull_keys()` in `src/source/pull.lua` restating exactly this.
-- **What would fully resolve it:** real source/repo access to
-  `git.wippy.ai/kickside/providers` (kickside/github's actual repo, per the
-  eng-metrics precedent this brief pointed at), or a working Keeper console
-  against a booted host with the trait to inspect a live `pull()` call's
-  actual request/response.
-- **Kept cleanly separated per the brief's instruction:** `pull_core.lua`
-  (REST calls, pagination, item/key normalization) has zero dependency on
-  this guess and is independently unit-tested against a fake `client:api`
-  double (`test/src/pull_core_test.lua`, 12 cases). Only `pull()`/
-  `pull_keys()` in `source/pull.lua` depend on the still-inferred envelope.
+- **No longer inferred — CONFIRMED, see "RESOLVED: `kickside.data:pullable`
+  request/response shape" above.** The envelope described in this bullet
+  (`{ config, cursor }` request; flat-item success shape; bare-error
+  failure shape) was the inference that turned out to need three concrete
+  corrections once real source became available: items must be wrapped
+  (`item_key`/`dedup_key`/`op`/`source_version`/`occurred_at`/`payload`),
+  the cursor must be a table that's never nil on success, and the failure
+  shape needed to come from a real DataError taxonomy, not a
+  `writable.write`-shaped guess. This bullet is kept for the historical
+  record of what was inferred and why (analogy to `kickside.data:writable.write`,
+  the template's own `src/sink/write.lua`) — it is not current.
+- **What resolved it:** real, unpacked source for
+  `git.wippy.ai/kickside/providers` became available locally (see the
+  "RESOLVED" section above for exact paths) — the eng-metrics precedent
+  this brief originally pointed at, now actually reachable.
+- **No longer split the way this bullet describes.** `pull_core.lua` now
+  owns the confirmed envelope directly (`M.pull`/`M.pull_keys`), matching
+  both real reference `pull_core.lua` files — it depends on the envelope
+  deliberately now that the envelope is confirmed, not inferred.
+  `source/pull.lua` is a thin pass-through to `pull_core.pull`/
+  `pull_core.pull_keys`. `test/src/pull_core_test.lua` now also carries the
+  real `pullable_conformance` kit's offline pass (see above).
+
+## RESOLVED: `pull_keys` reconcile wiring
+
+Confirmed against the real
+`providers-master\providers-master\github\src\source\_index.yaml`: the
+`kickside.automation.port` registry entry (`repo_pulls` here) carries a
+`reconcile:` field, a sibling to `binding:`, not a second bound method
+under the `kickside.data:pullable` contract (that contract accepts exactly
+one bound method, `pull` — see above, this finding was already correct).
+Shape:
+
+```yaml
+reconcile:
+  pull_keys: cotique.bitbucket_provider.source:pull_keys
+```
+
+`source/_index.yaml`'s `repo_pulls` entry now carries this field, pointing
+at the same `pull_keys` function.lua entry that was previously registered
+but structurally unreachable. `pull_keys` is not dead code.
 
 ## OPEN: `required_if` credential_schema syntax
 
@@ -288,7 +408,11 @@ same pattern as eng-metrics' Makefile) — since we can only act on our own
 code, that's what gets linted. Re-verified after the fix:
 `wippy lint --ns "cotique.bitbucket_provider.*"` → `No issues found, Checked
 50 entries`, and the full `make verify` now passes end to end (41/41 tests on
-both SQLite and the shared Postgres instance). Re-run bare `wippy lint` after
+both SQLite and the shared Postgres instance — historical count at the time
+of this fix; see the "Deliverable checklist" above for the current count
+after the later `kickside.data:pullable` envelope correction pass added the
+conformance test and expanded `pull_core_test.lua`/`data_error_test.lua`).
+Re-run bare `wippy lint` after
 any future `kickside/core` upgrade to check whether the upstream bug has been
 fixed — if so, the Makefile scoping can be relaxed back to unscoped, though
 there's no urgency to do so.

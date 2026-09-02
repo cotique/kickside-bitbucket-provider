@@ -106,17 +106,25 @@ entries:
       discover_resources: cotique.bitbucket_provider.connection:discover_resources
     method: run
 
+  - name: pullable_conformance
+    kind: library.lua
+    meta:
+      comment: Harness-local copy of kickside.automation.testing:pullable_conformance for provider source conformance tests (verbatim from providers-master\providers-master\atlassian\test\pullable_conformance.lua, see BUILD-NOTES.md).
+    source: file://pullable_conformance.lua
+    modules: [registry, json]
+
   - name: pull_core_test
     kind: function.lua
     meta:
       type: test
       suite: cotique_bitbucket_provider
       group: Bitbucket Connector
-      comment: pull_core normalizes items and walks pagination correctly against a fake client, with no network calls.
+      comment: pull_core normalizes items, walks pagination, builds the pullable envelope, and passes the real pullable_conformance kit — all against a fake client/transport, with no network calls.
     source: file://pull_core_test.lua
     imports:
       test: wippy.test:test
       pull_core: cotique.bitbucket_provider.source:pull_core
+      conformance: app:pullable_conformance
     method: run
 
   - name: db

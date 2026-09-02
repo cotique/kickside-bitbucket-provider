@@ -6,35 +6,33 @@ entries:
   - name: pull_core
     kind: library.lua
     meta:
-      comment: Bitbucket Cloud pull-request fetch, pagination, and normalization. Fully tested against fakes — no dependency on the kickside.data:pullable envelope.
+      comment: Bitbucket Cloud pull-request fetch, pagination, normalization, and the kickside.data:pullable envelope (pull/pull_keys). Envelope shape CONFIRMED against the real kickside/providers monorepo source, see BUILD-NOTES.md.
     source: file://pull_core.lua
+    modules:
+      - ctx
     imports:
       types: cotique.bitbucket_provider.client:types
+      data_error: cotique.bitbucket_provider.client:data_error
+      transport: cotique.bitbucket_provider.client:transport
 
   # cotique.bitbucket_provider.source:pull_items
   - name: pull_items
     kind: function.lua
     meta:
-      comment: kickside.data:pullable.pull for Bitbucket Cloud pull requests. Request/response envelope INFERRED, see pull.lua header and BUILD-NOTES.md.
+      comment: kickside.data:pullable.pull for Bitbucket Cloud pull requests. Thin pass-through to pull_core.pull — see pull_core.lua header and BUILD-NOTES.md.
     source: file://pull.lua
-    modules:
-      - ctx
     imports:
       pull_core: cotique.bitbucket_provider.source:pull_core
-      transport: cotique.bitbucket_provider.client:transport
     method: pull
 
   # cotique.bitbucket_provider.source:pull_keys
   - name: pull_keys
     kind: function.lua
     meta:
-      comment: Keys-only Bitbucket Cloud pull request listing used by Data Sync reconcile. Same inferred envelope as pull_items, see pull.lua header.
+      comment: Keys-only Bitbucket Cloud pull request listing used by Data Sync reconcile (wired via the repo_pulls automation port's reconcile.pull_keys field below, not a second kickside.data:pullable method). Thin pass-through to pull_core.pull_keys.
     source: file://pull.lua
-    modules:
-      - ctx
     imports:
       pull_core: cotique.bitbucket_provider.source:pull_core
-      transport: cotique.bitbucket_provider.client:transport
     method: pull_keys
 
   # cotique.bitbucket_provider.source:repo_pulls_source
@@ -46,16 +44,18 @@ entries:
   # 05-knowledge-uploads-automation-inbox.md ("the pullable source opens
   # with the connection as component_id context").
   #
-  # CONFIRMED live against the real kickside.data:pullable contract
-  # definition (booted in the standalone test harness, see BUILD-NOTES.md
-  # "OPEN: kickside.data:pullable request/response shape"): the contract
-  # accepts only ONE bound method, `pull`. Binding `pull_keys` here as a
-  # second kickside.data:pullable method is REJECTED at registry-commit time
-  # with "bound method is not defined in contract definition" — this is not
-  # a guess, it is the real validator's answer. pull_keys.lua/pull_keys the
-  # registry entry is kept (kickside/github ships the identical shape, see
-  # BUILD-NOTES.md), but it is NOT wired through this contract; exactly how
-  # Data Sync's reconcile path reaches it is still open — see BUILD-NOTES.md.
+  # CONFIRMED, both live against the real kickside.data:pullable contract
+  # definition (booted in the standalone test harness — see BUILD-NOTES.md)
+  # and now against the real kickside/github and kickside/atlassian source
+  # (providers-master\providers-master\github\src\source\_index.yaml and
+  # ...\atlassian\src\jira\source\_index.yaml, local unpacked copies of
+  # git.wippy.ai/kickside/providers): the contract accepts only ONE bound
+  # method, `pull`. Binding `pull_keys` here as a second kickside.data:pullable
+  # method is REJECTED at registry-commit time with "bound method is not
+  # defined in contract definition" — confirmed correct, not a guess.
+  # `pull_keys` is instead wired through the `repo_pulls` automation port's
+  # `reconcile.pull_keys` field below — the real mechanism Data Sync's
+  # reconcile path uses, per both real reference source/_index.yaml files.
   - name: repo_pulls_source
     kind: contract.binding
     meta:
@@ -73,12 +73,17 @@ entries:
           pull: cotique.bitbucket_provider.source:pull_items
 
   # cotique.bitbucket_provider.source:repo_pulls
-  # Automation port shape (config_schema/operations) per the template's own
-  # confirmed log/log_sink port (src/_index.yaml before this module removed
-  # the demo sink) plus, by symmetry, an output_schema for the source side —
-  # explicitly flagged as inferred alongside the pull.lua envelope, since no
-  # real kickside.data:pullable port declaration was inspectable (packed
-  # module — see BUILD-NOTES.md).
+  # Automation port shape (config_schema/operations/reconcile) — CONFIRMED
+  # against the real kickside/github port declaration
+  # (providers-master\providers-master\github\src\source\_index.yaml, local
+  # unpacked copy of git.wippy.ai/kickside/providers, see BUILD-NOTES.md
+  # "RESOLVED: kickside.data:pullable envelope"). `reconcile.pull_keys` is
+  # the real mechanism Data Sync's reconcile path reaches a keys-only
+  # listing through — a sibling field to `binding:`, not a second bound
+  # kickside.data:pullable method (that contract binds only `pull`, see
+  # repo_pulls_source above). `config_schema.connection_id` is the real
+  # port's connection-picker field shape, added here alongside this port's
+  # own pre-existing workspace/repo_slug/state/pagelen fields.
   - name: repo_pulls
     kind: registry.entry
     meta:
@@ -87,7 +92,14 @@ entries:
       comment: Read pull requests from a selected Bitbucket Cloud repository.
       icon: tabler:brand-bitbucket
     binding: cotique.bitbucket_provider.source:repo_pulls_source
+    reconcile:
+      pull_keys: cotique.bitbucket_provider.source:pull_keys
     config_schema:
+      connection_id:
+        picker: kickside-connection-trait-picker
+        role: primary
+        required: true
+        provider: bitbucket
       workspace:
         type: string
         title: Workspace
@@ -122,7 +134,7 @@ entries:
           "created_at": { "type": "string" },
           "updated_at": { "type": "string" },
           "merged_at": { "type": ["string", "null"] },
-          "url": { "type": ["string", "null"] },
+          "source_url": { "type": ["string", "null"] },
           "raw": { "type": "object", "description": "Original Bitbucket API item, untouched." }
         } }
     operations:
