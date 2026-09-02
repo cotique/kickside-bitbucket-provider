@@ -6,12 +6,13 @@ entries:
   - name: connection_lib
     kind: library.lua
     meta:
-      comment: Shared connection helper — resolves component_id from ambient context and builds a configured API client.
+      comment: Shared connection helper — resolves component_id from ambient context, builds a configured API client, and exposes the raw stored credential fields (workspace/repo_slug alongside access_token).
     source: file://connection_lib.lua
     modules:
       - ctx
     imports:
       transport: cotique.bitbucket_provider.client:transport
+      component: kickside.component:component
 
   # cotique.bitbucket_provider.connection:get_status
   - name: get_status
@@ -37,7 +38,7 @@ entries:
   - name: test_connection
     kind: function.lua
     meta:
-      comment: kickside.connection:connection test_connection — live GET /user call proving the stored credential works.
+      comment: kickside.connection:connection test_connection — live GET /repositories/{workspace}/{repo_slug} call proving the stored credential works (NOT /user — a repository access token, the only supported credential mode, can never reach that account-wide endpoint; see BUILD-NOTES.md).
     source: file://test_connection.lua
     imports:
       connection_lib: cotique.bitbucket_provider.connection:connection_lib
@@ -47,7 +48,7 @@ entries:
   - name: discover_resources
     kind: function.lua
     meta:
-      comment: kickside.connection:connection discover_resources — lists accessible Bitbucket repositories.
+      comment: kickside.connection:connection discover_resources — returns the single Bitbucket repository this credential is scoped to (a repository access token cannot list "all member repos" — see BUILD-NOTES.md).
     source: file://discover_resources.lua
     imports:
       connection_lib: cotique.bitbucket_provider.connection:connection_lib
@@ -61,13 +62,18 @@ entries:
   # Data Center is a different API/auth model entirely and is out of scope
   # (see BUILD-NOTES.md).
   #
-  # Single-field credential_schema, mirroring cotique/gitlab-provider's
-  # `gitlab_connection` shape: Bitbucket Cloud app passwords are fully
-  # deprecated (creation stopped 2025-09-09, brownout 2026-06-09..2026-07-27,
-  # full removal completed 2026-07-28 — see BUILD-NOTES.md's dated entry).
-  # Repository/workspace access tokens are now the only supported credential
-  # mode, so the earlier two-mode `auth_mode` select + `required_if` fields
-  # have been removed entirely — see BUILD-NOTES.md for what this replaces.
+  # Bitbucket Cloud app passwords are fully deprecated (creation stopped
+  # 2025-09-09, brownout 2026-06-09..2026-07-27, full removal completed
+  # 2026-07-28 — see BUILD-NOTES.md's dated entry). Repository access
+  # tokens are now the only supported credential mode — and a repository
+  # access token is Bitbucket's own concept of a token scoped to exactly
+  # ONE repository; it cannot call any account-wide endpoint (confirmed
+  # live 2026-09-02: GET /user and GET /repositories?role=member both
+  # fail with "This API is not accessible by this authentication
+  # mechanism" — see BUILD-NOTES.md). So this connection is, and must be,
+  # scoped to one repository too: `workspace`/`repo_slug` identify which
+  # one, alongside the token itself, so test_connection/discover_resources
+  # can call that repo's own endpoint instead of an account-wide one.
   - name: bitbucket_connection
     kind: contract.binding
     meta:
@@ -81,11 +87,21 @@ entries:
         version: "1.0"
         submit_label: Connect
         fields:
+          - key: workspace
+            label: Workspace
+            type: text
+            required: true
+            help: "The Bitbucket workspace ID — e.g. \"la-cotique\" from bitbucket.org/la-cotique/your-repo."
+          - key: repo_slug
+            label: Repository
+            type: text
+            required: true
+            help: "The repository slug — e.g. \"test-service\" from bitbucket.org/la-cotique/test-service."
           - key: access_token
             label: Access token
             type: password
             required: true
-            help: "Create one at a repository's own Settings > Security > Access tokens, scoped to Repositories: Read and Pull requests: Read only."
+            help: "Create one at THIS repository's own Settings > Security > Access tokens, scoped to Repositories: Read and Pull requests: Read only."
     contracts:
       - contract: kickside.contract:component
         methods:
