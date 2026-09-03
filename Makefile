@@ -1,16 +1,18 @@
 # cotique/bitbucket-provider — initialize, verify, and publish a standalone Kickside module.
+# Backend-only, no web component: matches the real reference providers that
+# need no custom Connect/picker UI (kickside/discord, kickside/slack, etc. —
+# see BUILD-NOTES.md), so there's no build/typecheck step and no --embed flag.
 MODULE  := bitbucket-provider
 LINT_NS := cotique.bitbucket_provider.*
 TYPE    := plugin
 VIS     := private
-EMBED   := --embed ui_fs
 
 # pipefail lets the test targets both stream runner output and keep its exit
 # code while grepping the log afterwards.
 SHELL := bash
 .SHELLFLAGS := -o pipefail -ec
 
-.PHONY: init setup check build dev lint typecheck test test-pg postgres-up postgres-down verify release-check publish
+.PHONY: init setup check lint test test-pg postgres-up postgres-down verify release-check publish
 init:
 	node scripts/init-module.mjs --organization "$(ORG)" --module "$(MODULE_NAME)" --title "$(TITLE)" $(if $(NAMESPACE),--namespace "$(NAMESPACE)",) $(if $(TAG),--tag "$(TAG)",) $(if $(GITHUB_OWNER),--github-owner "$(GITHUB_OWNER)",)
 # The harness `wippy update` runs twice, deliberately: a from-scratch run
@@ -24,14 +26,9 @@ setup:
 	wippy update
 	cd test && wippy update
 	cd test && wippy update --config .wippy.yaml
-	npm --prefix ui ci
 check:
 	node scripts/check-module.mjs
 	node scripts/test-initializer.mjs
-build:
-	npm --prefix ui run build
-dev:
-	npm --prefix ui run dev
 # Scoped to this module's own namespace. Unscoped `wippy lint` checks every
 # resolved dependency's Lua too — kickside/connection pulls in kickside/core,
 # which has a real, pre-existing type error in
@@ -41,8 +38,6 @@ dev:
 # that's what gets linted.
 lint:
 	wippy lint --ns "$(LINT_NS)"
-typecheck:
-	npm --prefix ui run type-check
 # The runner exits 0 when it discovers zero tests, which turns a broken
 # discovery setup into a false-green run. An empty discovery is always a
 # defect here — the template ships suites — so both targets fail on it.
@@ -54,11 +49,11 @@ postgres-up:
 	docker compose -f compose.test.yaml up -d --wait
 postgres-down:
 	docker compose -f compose.test.yaml down -v
-verify: setup check lint typecheck build test
+verify: setup check lint test
 release-check: verify
 	wippy auth status
-	wippy publish --dry-run --create --module-visibility $(VIS) --module-type $(TYPE) $(EMBED)
-publish: build
+	wippy publish --dry-run --create --module-visibility $(VIS) --module-type $(TYPE)
+publish:
 	node scripts/check-module.mjs
 	wippy auth status
-	wippy publish --create --module-visibility $(VIS) --module-type $(TYPE) $(EMBED)
+	wippy publish --create --module-visibility $(VIS) --module-type $(TYPE)
