@@ -10,13 +10,13 @@
 local test = require("test")
 local registry = require("registry")
 
-local NS = "cotique.bitbucket_provider"
+local NS = "cotique.bitbucket"
 
-local CONNECTION_ID = "cotique.bitbucket_provider.connection:bitbucket_connection"
-local SOURCE_BINDING_ID = "cotique.bitbucket_provider.source:repo_pulls_source"
-local SOURCE_PORT_ID = "cotique.bitbucket_provider.source:repo_pulls"
-local PULL_ITEMS_ID = "cotique.bitbucket_provider.source:pull_items"
-local PULL_KEYS_ID = "cotique.bitbucket_provider.source:pull_keys"
+local CONNECTION_ID = "cotique.bitbucket.connection:bitbucket_connection"
+local SOURCE_BINDING_ID = "cotique.bitbucket.source:repo_pulls_source"
+local SOURCE_PORT_ID = "cotique.bitbucket.source:repo_pulls"
+local PULL_ITEMS_ID = "cotique.bitbucket.source:pull_items"
+local PULL_KEYS_ID = "cotique.bitbucket.source:pull_keys"
 
 local function get(id)
     local entry, err = registry.get(id)
@@ -45,7 +45,7 @@ local function qualify(ref, ns)
 end
 
 local function define_tests()
-    test.describe("cotique.bitbucket_provider surface wiring", function()
+    test.describe("cotique.bitbucket surface wiring", function()
         test.it("declares the Bitbucket connection provider binding with a credential_schema", function()
             local conn = get(CONNECTION_ID)
             test.eq(conn.kind, "contract.binding")
@@ -62,10 +62,10 @@ local function define_tests()
         end)
 
         test.it("wires the get_status/test_connection/discover_resources/delete function entries", function()
-            get("cotique.bitbucket_provider.connection:get_status")
-            get("cotique.bitbucket_provider.connection:delete")
-            get("cotique.bitbucket_provider.connection:test_connection")
-            get("cotique.bitbucket_provider.connection:discover_resources")
+            get("cotique.bitbucket.connection:get_status")
+            get("cotique.bitbucket.connection:delete")
+            get("cotique.bitbucket.connection:test_connection")
+            get("cotique.bitbucket.connection:discover_resources")
         end)
 
         test.it("declares the pull request source binding implementing kickside.data:pullable", function()

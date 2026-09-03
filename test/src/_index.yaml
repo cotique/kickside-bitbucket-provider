@@ -1,7 +1,7 @@
 version: "1.0"
 namespace: app
 
-# Standalone harness for cotique/bitbucket-provider. Provides the host resources the boot
+# Standalone harness for cotique/bitbucket. Provides the host resources the boot
 # needs (app:db, app:processes, gateway + api router, env storage, a
 # permissive actor scope) and wires them through wippy/bootloader so the
 # co-located *_test.lua suites run in isolation. The router and gateway exist
@@ -37,7 +37,7 @@ entries:
       type: test
       comment: Endpoint, view, nav, and security entries exist and reference each other consistently.
       group: Bitbucket Connector
-      suite: cotique_bitbucket_provider
+      suite: cotique_bitbucket
     source: file://wiring_test.lua
     modules: [registry]
     imports:
@@ -58,52 +58,52 @@ entries:
     kind: function.lua
     meta:
       type: test
-      suite: cotique_bitbucket_provider
+      suite: cotique_bitbucket
       group: Bitbucket Connector
       comment: client:output redacts credential-shaped fields.
     source: file://output_test.lua
     imports:
       test: wippy.test:test
-      output: cotique.bitbucket_provider.client:output
+      output: cotique.bitbucket.client:output
     method: run
 
   - name: data_error_test
     kind: function.lua
     meta:
       type: test
-      suite: cotique_bitbucket_provider
+      suite: cotique_bitbucket
       group: Bitbucket Connector
       comment: client:data_error maps HTTP/transport failures onto the DataError envelope.
     source: file://data_error_test.lua
     imports:
       test: wippy.test:test
-      data_error: cotique.bitbucket_provider.client:data_error
+      data_error: cotique.bitbucket.client:data_error
     method: run
 
   - name: transport_test
     kind: function.lua
     meta:
       type: test
-      suite: cotique_bitbucket_provider
+      suite: cotique_bitbucket
       group: Bitbucket Connector
       comment: client:transport resolves the correct auth mode from a credentials table.
     source: file://transport_test.lua
     imports:
       test: wippy.test:test
-      transport: cotique.bitbucket_provider.client:transport
+      transport: cotique.bitbucket.client:transport
     method: run
 
   - name: discover_resources_test
     kind: function.lua
     meta:
       type: test
-      suite: cotique_bitbucket_provider
+      suite: cotique_bitbucket
       group: Bitbucket Connector
       comment: discover_resources normalizes a Bitbucket repository to the exact discover_resources shape.
     source: file://discover_resources_test.lua
     imports:
       test: wippy.test:test
-      discover_resources: cotique.bitbucket_provider.connection:discover_resources
+      discover_resources: cotique.bitbucket.connection:discover_resources
     method: run
 
   - name: pullable_conformance
@@ -117,20 +117,20 @@ entries:
     kind: function.lua
     meta:
       type: test
-      suite: cotique_bitbucket_provider
+      suite: cotique_bitbucket
       group: Bitbucket Connector
       comment: pull_core normalizes items, walks pagination, builds the pullable envelope, and passes the real pullable_conformance kit — all against a fake client/transport, with no network calls.
     source: file://pull_core_test.lua
     imports:
       test: wippy.test:test
-      pull_core: cotique.bitbucket_provider.source:pull_core
+      pull_core: cotique.bitbucket.source:pull_core
       conformance: app:pullable_conformance
     method: run
 
   - name: db
     kind: db.sql.sqlite
     meta:
-      comment: In-memory database for the bitbucket-provider suites.
+      comment: In-memory database for the bitbucket suites.
     file: ":memory:"
 
   - name: env_storage
@@ -169,24 +169,24 @@ entries:
       effect: allow
 
   # The harness source is the lock root. Its .wippy.yaml replaces the declared
-  # cotique/bitbucket-provider dependency with ../ so the module's canonical source and
+  # cotique/bitbucket dependency with ../ so the module's canonical source and
   # colocated tests load directly without a lock-file replacement.
 
-  - name: bitbucket_provider_harness.dep.contract
+  - name: bitbucket_harness.dep.contract
     version: "*"
     kind: ns.dependency
     meta:
       comment: Shared contract definitions (kickside.contract:*, kickside.data:pullable) imported by the replacement module under test.
     component: "kickside/contract"
 
-  - name: bitbucket_provider_harness.dep.security
+  - name: bitbucket_harness.dep.security
     version: "*"
     kind: ns.dependency
     meta:
       comment: Platform security groups (wippy.security:process) that give host-managed services their policy scope under strict mode.
     component: "wippy/security"
 
-  - name: bitbucket_provider_harness.dep.bootloader
+  - name: bitbucket_harness.dep.bootloader
     version: "*"
     kind: ns.dependency
     meta:

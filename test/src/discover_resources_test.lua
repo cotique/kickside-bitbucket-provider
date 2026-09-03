@@ -2,7 +2,7 @@ local test = require("test")
 local discover_resources = require("discover_resources")
 
 local function define_tests()
-    test.describe("cotique.bitbucket_provider.connection discover_resources normalization", function()
+    test.describe("cotique.bitbucket.connection discover_resources normalization", function()
         test.it("normalizes a Bitbucket repository to the discover_resources shape", function()
             -- Fixture shaped like a real GET /repositories response item
             -- (field names per BUILD-NOTES.md's empirically-verified payload).

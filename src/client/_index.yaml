@@ -1,31 +1,31 @@
 version: "1.0"
-namespace: cotique.bitbucket_provider.client
+namespace: cotique.bitbucket.client
 
 entries:
-  # cotique.bitbucket_provider.client:types
+  # cotique.bitbucket.client:types
   - name: types
     kind: library.lua
     meta:
       comment: Shared constants for the Bitbucket Cloud client (base URL, auth modes, state mapping).
     source: file://types.lua
 
-  # cotique.bitbucket_provider.client:output
+  # cotique.bitbucket.client:output
   - name: output
     kind: library.lua
     meta:
       comment: Safe output encoding — redacts credential-shaped fields before anything reaches a log line or error message.
     source: file://output.lua
 
-  # cotique.bitbucket_provider.client:data_error
+  # cotique.bitbucket.client:data_error
   - name: data_error
     kind: library.lua
     meta:
       comment: Maps HTTP/transport failures onto the kickside.data DataError envelope (code, message, retriable, scope).
     source: file://data_error.lua
     imports:
-      types: cotique.bitbucket_provider.client:types
+      types: cotique.bitbucket.client:types
 
-  # cotique.bitbucket_provider.client:api
+  # cotique.bitbucket.client:api
   - name: api
     kind: library.lua
     meta:
@@ -36,10 +36,10 @@ entries:
       - json
       - base64
     imports:
-      data_error: cotique.bitbucket_provider.client:data_error
-      types: cotique.bitbucket_provider.client:types
+      data_error: cotique.bitbucket.client:data_error
+      types: cotique.bitbucket.client:types
 
-  # cotique.bitbucket_provider.client:transport
+  # cotique.bitbucket.client:transport
   - name: transport
     kind: library.lua
     meta:
@@ -47,8 +47,8 @@ entries:
     source: file://transport.lua
     imports:
       component: kickside.component:component
-      api: cotique.bitbucket_provider.client:api
-      types: cotique.bitbucket_provider.client:types
+      api: cotique.bitbucket.client:api
+      types: cotique.bitbucket.client:types
 
   # Colocated *_test.lua files for this slice live in test/src/ (the
   # standalone harness), not here. CONFIRMED empirically during this build

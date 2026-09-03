@@ -2,7 +2,7 @@ local test = require("test")
 local output = require("output")
 
 local function define_tests()
-    test.describe("cotique.bitbucket_provider.client:output redaction", function()
+    test.describe("cotique.bitbucket.client:output redaction", function()
         test.it("redacts credential-shaped fields by key name", function()
             local redacted = output.redact({
                 username = "alice",

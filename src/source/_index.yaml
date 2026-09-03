@@ -1,8 +1,8 @@
 version: "1.0"
-namespace: cotique.bitbucket_provider.source
+namespace: cotique.bitbucket.source
 
 entries:
-  # cotique.bitbucket_provider.source:pull_core
+  # cotique.bitbucket.source:pull_core
   - name: pull_core
     kind: library.lua
     meta:
@@ -11,31 +11,31 @@ entries:
     modules:
       - ctx
     imports:
-      types: cotique.bitbucket_provider.client:types
-      data_error: cotique.bitbucket_provider.client:data_error
-      transport: cotique.bitbucket_provider.client:transport
+      types: cotique.bitbucket.client:types
+      data_error: cotique.bitbucket.client:data_error
+      transport: cotique.bitbucket.client:transport
 
-  # cotique.bitbucket_provider.source:pull_items
+  # cotique.bitbucket.source:pull_items
   - name: pull_items
     kind: function.lua
     meta:
       comment: kickside.data:pullable.pull for Bitbucket Cloud pull requests. Thin pass-through to pull_core.pull — see pull_core.lua header and BUILD-NOTES.md.
     source: file://pull.lua
     imports:
-      pull_core: cotique.bitbucket_provider.source:pull_core
+      pull_core: cotique.bitbucket.source:pull_core
     method: pull
 
-  # cotique.bitbucket_provider.source:pull_keys
+  # cotique.bitbucket.source:pull_keys
   - name: pull_keys
     kind: function.lua
     meta:
       comment: Keys-only Bitbucket Cloud pull request listing used by Data Sync reconcile (wired via the repo_pulls automation port's reconcile.pull_keys field below, not a second kickside.data:pullable method). Thin pass-through to pull_core.pull_keys.
     source: file://pull.lua
     imports:
-      pull_core: cotique.bitbucket_provider.source:pull_core
+      pull_core: cotique.bitbucket.source:pull_core
     method: pull_keys
 
-  # cotique.bitbucket_provider.source:repo_pulls_source
+  # cotique.bitbucket.source:repo_pulls_source
   # Implements kickside.data:pullable for a selected repository's pull
   # requests. context_required: [component_id] follows the same pattern the
   # connection binding uses — the engine opens this binding with the
@@ -70,9 +70,9 @@ entries:
       - contract: kickside.data:pullable
         context_required: [component_id]
         methods:
-          pull: cotique.bitbucket_provider.source:pull_items
+          pull: cotique.bitbucket.source:pull_items
 
-  # cotique.bitbucket_provider.source:repo_pulls
+  # cotique.bitbucket.source:repo_pulls
   # Automation port shape (config_schema/operations/reconcile) — CONFIRMED
   # against the real kickside/github port declaration
   # (providers-master\providers-master\github\src\source\_index.yaml, local
@@ -91,9 +91,9 @@ entries:
       title: Bitbucket Pull Requests
       comment: Read pull requests from a selected Bitbucket Cloud repository.
       icon: tabler:brand-bitbucket
-    binding: cotique.bitbucket_provider.source:repo_pulls_source
+    binding: cotique.bitbucket.source:repo_pulls_source
     reconcile:
-      pull_keys: cotique.bitbucket_provider.source:pull_keys
+      pull_keys: cotique.bitbucket.source:pull_keys
     config_schema:
       connection_id:
         picker: kickside-connection-trait-picker
