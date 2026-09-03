@@ -1,21 +1,16 @@
--- Registry-shape test for the module's contract bindings, automation port,
--- HTTP/UI surfaces, and security policy. The standalone harness cannot open
--- contracts under an actor/scope (see docs/kickside-development/
--- 13-testing.md "Harness Limits"), so connection/source behavior is verified
--- as registry wiring here; the underlying logic (normalization, pagination,
--- redaction) is proven by the colocated *_test.lua suites next to their
--- source.
+-- Registry-shape test for the module's contract bindings and automation
+-- port. This module ships no web component, no custom HTTP endpoint, and no
+-- security policy of its own — matches the real reference provider modules
+-- (kickside/discord, kickside/slack, etc.; see BUILD-NOTES.md "structural
+-- audit"). The standalone harness cannot open contracts under an
+-- actor/scope (see docs/kickside-development/13-testing.md "Harness
+-- Limits"), so connection/source behavior is verified as registry wiring
+-- here; the underlying logic (normalization, pagination, redaction) is
+-- proven by the colocated *_test.lua suites next to their source.
 local test = require("test")
 local registry = require("registry")
 
 local NS = "cotique.bitbucket_provider"
-local HANDLER_ID = "cotique.bitbucket_provider.api:get_status"
-local ENDPOINT_ID = "cotique.bitbucket_provider.api:get_status.endpoint"
-local VIEW_ID = "cotique.bitbucket_provider:bitbucket_provider_view"
-local NAV_ID = "cotique.bitbucket_provider:nav_item"
-local STATIC_ID = "cotique.bitbucket_provider:ui_static"
-local FS_ID = "cotique.bitbucket_provider:ui_fs"
-local POLICY_ID = "cotique.bitbucket_provider.security:bitbucket_provider_endpoint_access"
 
 local CONNECTION_ID = "cotique.bitbucket_provider.connection:bitbucket_connection"
 local SOURCE_BINDING_ID = "cotique.bitbucket_provider.source:repo_pulls_source"
@@ -51,49 +46,6 @@ end
 
 local function define_tests()
     test.describe("cotique.bitbucket_provider surface wiring", function()
-        test.it("pairs the status endpoint with its handler on the router token", function()
-            get(HANDLER_ID)
-            local ep = data_of(get(ENDPOINT_ID))
-            test.eq(qualify(ep.func, "cotique.bitbucket_provider.api"), HANDLER_ID)
-            test.eq(ep.method, "GET")
-            test.eq(ep.path, "/bitbucket-provider/status")
-            test.eq(meta_of(get(ENDPOINT_ID)).router, "app:api")
-        end)
-
-        test.it("declares a view served by the module's own static mount", function()
-            local view = meta_of(get(VIEW_ID))
-            test.eq(view.type, "view.component")
-            test.eq(view.tag_name, "cotique-bitbucket-provider")
-            test.eq(view.entry_point, "index.js")
-            test.eq(view.announced, true)
-            test.eq(view.auto_register, true)
-
-            local static = get(STATIC_ID)
-            test.eq(data_of(static).path, "/" .. view.base_path)
-            test.eq(qualify(data_of(static).fs, NS), FS_ID)
-            get(FS_ID)
-        end)
-
-        test.it("mounts the view in the app nav by tag", function()
-            local nav = meta_of(get(NAV_ID))
-            test.eq(nav.type, "ui.nav_item")
-            test.eq(nav.path, "/bitbucket-provider")
-            test.eq(nav.render, "component")
-            test.eq(nav.component_tag, meta_of(get(VIEW_ID)).tag_name)
-        end)
-
-        test.it("gates the api namespace behind the injectable access policy", function()
-            local policy = data_of(get(POLICY_ID))
-            local resources = policy.policy and policy.policy.resources
-            test.not_nil(resources, "policy must list resources")
-            if type(resources) == "string" then resources = { resources } end
-            local covered = false
-            for _, r in ipairs(resources) do
-                if r == "cotique.bitbucket_provider.api:*" then covered = true end
-            end
-            test.is_true(covered, "policy must cover cotique.bitbucket_provider.api:*")
-        end)
-
         test.it("declares the Bitbucket connection provider binding with a credential_schema", function()
             local conn = get(CONNECTION_ID)
             test.eq(conn.kind, "contract.binding")

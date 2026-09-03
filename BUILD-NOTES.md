@@ -617,3 +617,95 @@ Flagged, not changed (a real decision, not a technical correctness issue):
   `BUSL-1.1`; this module still has the template's default `MIT`. Left
   as-is — which license this repo ships under is the user's call, not
   something to silently match to Wippy's own platform-module convention.
+
+## RESOLVED: removed the UI/api/security apparatus, which also fixed a real fresh-checkout bootstrap deadlock
+
+Per the structural audit above, checked every module in `providers-master`
+for whether a *credential-only, no-picker* connection provider needs any
+custom UI/HTTP surface at all. Several real modules are exactly this shape —
+`discord` (bot token), `slack`, `telegram`, `sso-github`, `sso-google`,
+`sso-microsoft`, `sso-oidc` — and **none of them ship a `ui/`, `api/`, or
+`security/` folder, and none declare `embed:` in `wippy.yaml`.** This
+module's own `src/api/` (a custom `GET /bitbucket-provider/status` endpoint),
+`src/security/` (the policy gating that endpoint), and the entire `ui/`
+(status Vue page) + `static/` (its built bundle) were template-demo
+leftovers, adapted rather than removed in the initial build pass.
+
+**Removed:** `src/api/`, `src/security/`, `ui/`, `static/`; the
+`api_router`/`ui_server` `ns.requirement`s and `ui_fs`/`ui_static`/
+`bitbucket_provider_view`/`nav_item` entries from `src/_index.yaml`; the
+`embed:` block from `wippy.yaml`; the `build`/`typecheck`/`dev` Makefile
+targets and `EMBED` var; the corresponding assertions in
+`test/src/wiring_test.lua`. Patched `scripts/check-module.mjs` (previously
+unconditionally read `ui/package.json`/`ui/vite.config.ts`/
+`ui/src/styles.css`) to gate every frontend-contract check behind `const
+hasUi = await exists(resolve(root, 'ui/package.json'))`.
+
+**Unexpected, real bonus: this also fixes a genuine fresh-checkout bootstrap
+deadlock in `bdf0085`'s own "Fix CI" commit.** That commit declared the
+module-under-test itself as an explicit `ns.dependency`
+(`bitbucket_provider_harness.dep.module`) purely to route its own
+`user_security_scope` requirement through `parameters:` instead of a raw
+`.wippy.yaml` `override:` path that stopped resolving under the current CLI.
+Reproduced directly against this repo's real, merged `main` (a from-scratch
+`test/`, no lock, no vendor cache): `wippy update` — bare, then again with
+`--config .wippy.yaml` — fails identically both times with `cotique/
+bitbucket-provider@*: list versions: module not found`. Root cause: once the
+module-under-test is an explicit root `ns.dependency`, `wippy update`'s
+first pass always attempts to resolve it directly against the Hub (it's
+never been published there), fails outright, and — unlike a pass that
+succeeds partially — writes **no lock at all**. The documented two-pass
+bootstrap trick (`docs/kickside-development` — a bare `wippy update`
+followed by one with `--config .wippy.yaml`) depends on the first pass
+having written *some* lock for the second to build on; with none written,
+the second pass fails identically, forever. This is a real deadlock, not a
+timing fluke — confirmed it also reproduces on `cotique/eng-metrics`'s own
+`main` (read-only check, its `wippy.lock` was restored byte-identical
+afterward), so it isn't specific to this module. Removing `src/security/`
+here removes the only reason `bitbucket_provider_harness.dep.module`
+existed — with it gone, the harness surfaces the module purely through
+`test/.wippy.yaml`'s `workspace.replacements`, exactly the shape confirmed
+(both here and via a control test against this repo's own pre-`bdf0085`
+history) to bootstrap cleanly from a genuinely fresh checkout.
+
+`make verify` re-run clean after all of this, from a directory with `test/
+.wippy/vendor`, `test/wippy.lock`, and the root `wippy.lock` all deleted
+first (i.e. a real fresh-checkout simulation, not just "still had a stale
+lock lying around"): 49/49 tests on both SQLite and Postgres (shared
+`wippy-postgres` instance, port 5432), lint clean, no build/typecheck step
+needed anymore.
+
+## RESOLVED: CI red — a real `wippy test` regression in v0.3.35a, not our fix
+
+After pushing the UI-removal/README/deadlock-fix work, CI failed at the
+`test` step with `node with ID {cotique.bitbucket_provider.client transport
+cotique.bitbucket_provider.client:transport} not found` — a
+workspace-replaced module's own entries not resolving during `wippy test`,
+even though `wippy update`/`wippy lint` resolved the identical graph fine
+moments earlier in the same job.
+
+Isolated directly, not assumed: downloaded the actual `latest` CLI release
+(`v0.3.35a`, 2026-09-01 — confirmed via `wippy version`) and ran it against
+this exact checkout, from a genuinely fresh state (`test/.wippy/vendor`,
+`test/wippy.lock`, root `wippy.lock` all deleted first) — `wippy update`
+succeeds, `cd test && wippy test` fails with the error above. The identical
+sequence with the locally-installed `v0.3.33a` passes clean, 49/49.
+Confirmed this isn't specific to this repo: reproduces identically on
+`kickside-gitlab-provider` too (different entry, same error shape — see
+that repo's own BUILD-NOTES.md).
+
+This is the third distinct `v0.3.35a+` regression this project's own
+history has hit around workspace-replaced modules (the first two: the raw
+`.wippy.yaml` `override:` path `bdf0085` worked around, and the
+explicit-module-dependency bootstrap deadlock that working-around
+introduced, fixed above) — all three share the same shape: something about
+resolving into a workspace-replaced module's own entries changed between
+`v0.3.33a` and `v0.3.35a`, and it doesn't affect every code path equally
+(`wippy update`/`wippy lint` are fine; `wippy test`'s own state-loading is
+not).
+
+**Fix:** pinned `WIPPY_VERSION: v0.3.33a` in `.github/workflows/verify.yml`
+instead of `latest`, per that file's own stated policy ("set an exact tag
+only to bisect a runtime regression" — this is exactly that case). Not a
+permanent fix — revert to `latest` once a release without this regression
+ships, or re-pin/bisect again if it recurs.

@@ -5,9 +5,10 @@ entries:
   # cotique.bitbucket_provider:definition
   - name: definition
     kind: ns.definition
+    readme: file://README.md
     meta:
       title: Bitbucket Connector
-      description: Bitbucket Cloud connector for Kickside Data Sync — a kickside.connection provider (app password or access token) plus a kickside.data:pullable source publishing a repository's pull requests as an automation port.
+      description: Read-only Bitbucket Cloud connector — a repository access token connection provider plus a pull-request pull source for Kickside Data Sync. Never creates, updates, merges, comments on, approves, or labels anything.
 
   # cotique.bitbucket_provider:dep.kickside.contract
   - version: "*"
@@ -33,73 +34,3 @@ entries:
       comment: Component client library (get_private_context) used to read connection credentials.
     component: kickside/component
 
-  # ─── Dependency interface (ns.requirement) ───────────────────────────
-  - name: api_router
-    kind: ns.requirement
-    meta:
-      comment: HTTP router the bitbucket-provider endpoints attach to. Must enforce auth + endpoint_firewall.
-    default: app:api
-    targets:
-      - entry: cotique.bitbucket_provider.api:get_status.endpoint
-        path: .meta.router
-
-  - name: ui_server
-    kind: ns.requirement
-    meta:
-      comment: HTTP server the bitbucket-provider UI bundle is served from.
-    default: app:gateway
-    targets:
-      - entry: cotique.bitbucket_provider:ui_static
-        path: .meta.server
-
-  # ─── UI (the bitbucket-provider page as a Wippy web component) ──────────────────
-  # The module BUILDS (ui/), SHIPS (static/), and SERVES (its own http.static)
-  # the page, exposed as a view.component the host mounts by tag.
-  - name: ui_fs
-    kind: fs.directory
-    meta:
-      comment: Built bitbucket-provider web component bundle (from ui/).
-    directory: ./static
-    auto_init: true
-
-  - name: ui_static
-    kind: http.static
-    meta:
-      comment: Serves the bitbucket-provider web component bundle at /cotique-bitbucket-provider.
-      server: app:gateway
-    path: /cotique-bitbucket-provider
-    fs: cotique.bitbucket_provider:ui_fs
-    options:
-      mime_types:
-        .js: application/javascript
-        .css: text/css
-        .map: application/json
-
-  - name: bitbucket_provider_view
-    kind: registry.entry
-    meta:
-      type: view.component
-      title: Bitbucket Connector
-      announced: true
-      auto_register: true
-      tag_name: cotique-bitbucket-provider
-      base_path: cotique-bitbucket-provider
-      entry_point: index.js
-      icon: tabler:terminal-2
-      description: Renders the cotique/bitbucket-provider module status view inside the Kickside shell, loads authenticated status data through the host proxy, and requires no caller-supplied props.
-      props: {}
-
-  - name: nav_item
-    kind: registry.entry
-    meta:
-      type: ui.nav_item
-      private: true
-      section: ""
-      path: /bitbucket-provider
-      route_name: bitbucket-provider
-      title: Bitbucket Connector
-      comment: Bitbucket Cloud connection and pull-request source module status. No standalone page — reachable only via Connections' Connect-app flow.
-      icon: tabler:terminal-2
-      order: 90
-      render: component
-      component_tag: cotique-bitbucket-provider
