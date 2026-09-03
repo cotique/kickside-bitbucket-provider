@@ -6,10 +6,15 @@ Never creates, updates, merges, comments on, approves, or labels anything.
 
 See [`src/README.md`](src/README.md) for the module's own auth/layout/planes
 summary (the same content the Wippy Hub's "Read Me" tab shows) and
-[`BUILD-NOTES.md`](BUILD-NOTES.md) for build-time findings — including what's
-confirmed vs. inferred about the `kickside.data:pullable` contract's exact
-envelope, why Bitbucket Cloud app passwords aren't supported, and the real
-reference source this module was built against.
+[`BUILD-NOTES.md`](BUILD-NOTES.md) for build-time findings — why Bitbucket
+Cloud app passwords aren't supported, this module's own scope/structure
+decisions, and the real reference source it was built against. The
+platform-wide findings that came out of this build (the confirmed
+`kickside.data:pullable` contract envelope and `pull_keys` reconcile wiring,
+the fresh-checkout bootstrap deadlock, the `wippy test` v0.3.35a regression,
+and more) moved to the shared, cross-module `FINDINGS.md`
+(`C:\claude\work\wippy\work-wippy\FINDINGS.md`) — `BUILD-NOTES.md` points to
+the exact section for each.
 
 ## What this module provides
 
@@ -36,8 +41,11 @@ This module owns no persistence of its own — Kickside Data Sync's own engine
 owns cursor/lease/schedule/dedup/id-map/sink routing. It ships no web
 component and no custom HTTP endpoint — matches the real reference
 connection providers (`kickside/discord`, `kickside/slack`, etc.) that need
-no custom Connect/picker UI for a credential-only connection; see
-`BUILD-NOTES.md`'s structural audit for what that comparison covered.
+no custom Connect/picker UI for a credential-only connection; see the
+shared `FINDINGS.md` (`C:\claude\work\wippy\work-wippy\FINDINGS.md`, "A
+credential-only, no-picker connection provider needs no `ui/`, `api/`, or
+`security/` folder, no `embed:`, and no `kickside/core` dependency") for the
+full structural-audit precedent this comparison is based on.
 
 Package identity (`organization/module`), registry namespace
 (`namespace:name`), and component instance IDs are different identities. Do
