@@ -674,3 +674,38 @@ first (i.e. a real fresh-checkout simulation, not just "still had a stale
 lock lying around"): 49/49 tests on both SQLite and Postgres (shared
 `wippy-postgres` instance, port 5432), lint clean, no build/typecheck step
 needed anymore.
+
+## RESOLVED: CI red — a real `wippy test` regression in v0.3.35a, not our fix
+
+After pushing the UI-removal/README/deadlock-fix work, CI failed at the
+`test` step with `node with ID {cotique.bitbucket_provider.client transport
+cotique.bitbucket_provider.client:transport} not found` — a
+workspace-replaced module's own entries not resolving during `wippy test`,
+even though `wippy update`/`wippy lint` resolved the identical graph fine
+moments earlier in the same job.
+
+Isolated directly, not assumed: downloaded the actual `latest` CLI release
+(`v0.3.35a`, 2026-09-01 — confirmed via `wippy version`) and ran it against
+this exact checkout, from a genuinely fresh state (`test/.wippy/vendor`,
+`test/wippy.lock`, root `wippy.lock` all deleted first) — `wippy update`
+succeeds, `cd test && wippy test` fails with the error above. The identical
+sequence with the locally-installed `v0.3.33a` passes clean, 49/49.
+Confirmed this isn't specific to this repo: reproduces identically on
+`kickside-gitlab-provider` too (different entry, same error shape — see
+that repo's own BUILD-NOTES.md).
+
+This is the third distinct `v0.3.35a+` regression this project's own
+history has hit around workspace-replaced modules (the first two: the raw
+`.wippy.yaml` `override:` path `bdf0085` worked around, and the
+explicit-module-dependency bootstrap deadlock that working-around
+introduced, fixed above) — all three share the same shape: something about
+resolving into a workspace-replaced module's own entries changed between
+`v0.3.33a` and `v0.3.35a`, and it doesn't affect every code path equally
+(`wippy update`/`wippy lint` are fine; `wippy test`'s own state-loading is
+not).
+
+**Fix:** pinned `WIPPY_VERSION: v0.3.33a` in `.github/workflows/verify.yml`
+instead of `latest`, per that file's own stated policy ("set an exact tag
+only to bisect a runtime regression" — this is exactly that case). Not a
+permanent fix — revert to `latest` once a release without this regression
+ships, or re-pin/bisect again if it recurs.
