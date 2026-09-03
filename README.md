@@ -17,9 +17,8 @@ decisions, and the real reference source it was built against. The
 platform-wide findings that came out of this build (the confirmed
 `kickside.data:pullable` contract envelope and `pull_keys` reconcile wiring,
 the fresh-checkout bootstrap deadlock, the `wippy test` v0.3.35a regression,
-and more) moved to the shared, cross-module `FINDINGS.md`
-(`C:\claude\work\wippy\work-wippy\FINDINGS.md`) — `BUILD-NOTES.md` points to
-the exact section for each.
+and more) moved to the shared, cross-module findings file —
+`BUILD-NOTES.md` points to the exact section for each.
 
 ## What this module provides
 
@@ -51,11 +50,8 @@ This module owns no persistence of its own — Kickside Data Sync's own engine
 owns cursor/lease/schedule/dedup/id-map/sink routing. It ships no web
 component and no custom HTTP endpoint — matches the real reference
 connection providers (`kickside/discord`, `kickside/slack`, etc.) that need
-no custom Connect/picker UI for a credential-only connection; see the
-shared `FINDINGS.md` (`C:\claude\work\wippy\work-wippy\FINDINGS.md`, "A
-credential-only, no-picker connection provider needs no `ui/`, `api/`, or
-`security/` folder, no `embed:`, and no `kickside/core` dependency") for the
-full structural-audit precedent this comparison is based on.
+no custom Connect/picker UI for a credential-only connection; see
+`BUILD-NOTES.md`'s structural audit for what that comparison covered.
 
 Package identity (`organization/module`), registry namespace
 (`namespace:name`), and component instance IDs are different identities. Do
