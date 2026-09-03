@@ -1,4 +1,4 @@
-# Build notes — cotique/bitbucket-provider
+# Build notes — cotique/bitbucket
 
 This module is a Bitbucket Cloud connector for the Kickside platform: a
 `kickside.connection` provider (access token only — see the 2026-09-02
@@ -11,7 +11,7 @@ requests as an automation port. Read alongside `README.md` and
 
 - [x] `wippy.yaml` — `description` rewritten from the template's log-sink
       placeholder; `repository:` fixed from the template's guessed
-      `https://github.com/cotique/bitbucket-provider` to the real
+      `https://github.com/cotique/bitbucket` to the real
       `https://github.com/cotique/kickside-bitbucket-provider`.
 - [x] `src/` implements the connection + source structure below.
 - [x] `test/` — colocated-logic tests + harness registry-shape test +
@@ -218,7 +218,7 @@ to inspect its registry shape, then removed — see below).
   rejection:
   ```
   transaction rejected for registry.commit: bound method is not defined in
-  contract definition: cotique.bitbucket_provider.source:repo_pulls_source
+  contract definition: cotique.bitbucket.source:repo_pulls_source
   binds kickside.data:pullable.pull_keys
   ```
   i.e. **`kickside.data:pullable` accepts exactly one bound method, `pull`.**
@@ -277,7 +277,7 @@ Shape:
 
 ```yaml
 reconcile:
-  pull_keys: cotique.bitbucket_provider.source:pull_keys
+  pull_keys: cotique.bitbucket.source:pull_keys
 ```
 
 `source/_index.yaml`'s `repo_pulls` entry now carries this field, pointing
@@ -381,7 +381,7 @@ verified as follows, and independently reproducing the exact finding
 `cotique/eng-metrics`' own `docs/BUILD-NOTES.md` #7 documents for the same
 `kickside.core.projections.persist:catchup` bug:
 
-1. `wippy lint --ns "cotique.bitbucket_provider*"` → **`No issues found`,
+1. `wippy lint --ns "cotique.bitbucket*"` → **`No issues found`,
    `Checked 56 entries`.** This module's own code lints completely clean.
 2. `wippy lint --ns "kickside.core.*"` → the exact same 3 errors that show
    up in the bare `wippy lint` run, all inside
@@ -417,10 +417,10 @@ bug.
 
 **Fix applied (matching `cotique/eng-metrics`' own precedent exactly):**
 scoped the Makefile's `lint` target to this module's own namespace —
-`wippy lint --ns "cotique.bitbucket_provider.*"` (added a `LINT_NS` var,
+`wippy lint --ns "cotique.bitbucket.*"` (added a `LINT_NS` var,
 same pattern as eng-metrics' Makefile) — since we can only act on our own
 code, that's what gets linted. Re-verified after the fix:
-`wippy lint --ns "cotique.bitbucket_provider.*"` → `No issues found, Checked
+`wippy lint --ns "cotique.bitbucket.*"` → `No issues found, Checked
 50 entries`, and the full `make verify` now passes end to end (41/41 tests on
 both SQLite and the shared Postgres instance — historical count at the time
 of this fix; see the "Deliverable checklist" above for the current count
@@ -678,8 +678,8 @@ needed anymore.
 ## RESOLVED: CI red — a real `wippy test` regression in v0.3.35a, not our fix
 
 After pushing the UI-removal/README/deadlock-fix work, CI failed at the
-`test` step with `node with ID {cotique.bitbucket_provider.client transport
-cotique.bitbucket_provider.client:transport} not found` — a
+`test` step with `node with ID {cotique.bitbucket.client transport
+cotique.bitbucket.client:transport} not found` — a
 workspace-replaced module's own entries not resolving during `wippy test`,
 even though `wippy update`/`wippy lint` resolved the identical graph fine
 moments earlier in the same job.
@@ -709,3 +709,23 @@ instead of `latest`, per that file's own stated policy ("set an exact tag
 only to bisect a runtime regression" — this is exactly that case). Not a
 permanent fix — revert to `latest` once a release without this regression
 ships, or re-pin/bisect again if it recurs.
+
+## Renamed module identity: cotique/bitbucket-provider -> cotique/bitbucket (2026-09-03)
+
+Matching the real reference convention (`kickside/github`, `kickside/
+atlassian`, `kickside/discord` etc. don't carry a `-provider`/`-connector`
+suffix on the module name itself) — the same rename already applied to the
+sibling `kickside-gitlab-provider` repo. Renamed throughout: `wippy.yaml`
+(`module:`, keywords), `.kickside-module.json` identity, the root namespace
+(`cotique.bitbucket_provider` -> `cotique.bitbucket`), the test harness's
+workspace replacement target and Postgres database name
+(`cotique_test_bitbucket_provider` -> `cotique_test_bitbucket`), and the CI
+workflow. The GitHub repository URL in `wippy.yaml` (`repository:
+https://github.com/cotique/kickside-bitbucket-provider`) is deliberately
+untouched — that identifier is independent of the Wippy module identity.
+
+Done the same way as the gitlab-provider rename: a scripted,
+compound-token-first pass (longest/most specific tokens first) followed by
+a manual pass for the remaining bare occurrences, specifically to avoid
+corrupting `kickside-bitbucket-provider` (the real GitHub repo name, which
+contains `bitbucket-provider` as a substring) with a blind global replace.

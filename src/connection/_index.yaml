@@ -1,8 +1,8 @@
 version: "1.0"
-namespace: cotique.bitbucket_provider.connection
+namespace: cotique.bitbucket.connection
 
 entries:
-  # cotique.bitbucket_provider.connection:connection_lib
+  # cotique.bitbucket.connection:connection_lib
   - name: connection_lib
     kind: library.lua
     meta:
@@ -11,10 +11,10 @@ entries:
     modules:
       - ctx
     imports:
-      transport: cotique.bitbucket_provider.client:transport
+      transport: cotique.bitbucket.client:transport
       component: kickside.component:component
 
-  # cotique.bitbucket_provider.connection:get_status
+  # cotique.bitbucket.connection:get_status
   - name: get_status
     kind: function.lua
     meta:
@@ -24,7 +24,7 @@ entries:
       base_connection: kickside.connection:base_connection
     method: get_status
 
-  # cotique.bitbucket_provider.connection:delete
+  # cotique.bitbucket.connection:delete
   - name: delete
     kind: function.lua
     meta:
@@ -34,28 +34,28 @@ entries:
       base_connection: kickside.connection:base_connection
     method: delete
 
-  # cotique.bitbucket_provider.connection:test_connection
+  # cotique.bitbucket.connection:test_connection
   - name: test_connection
     kind: function.lua
     meta:
       comment: kickside.connection:connection test_connection — live GET /repositories/{workspace}/{repo_slug} call proving the stored credential works (NOT /user — a repository access token, the only supported credential mode, can never reach that account-wide endpoint; see BUILD-NOTES.md).
     source: file://test_connection.lua
     imports:
-      connection_lib: cotique.bitbucket_provider.connection:connection_lib
+      connection_lib: cotique.bitbucket.connection:connection_lib
     method: test_connection
 
-  # cotique.bitbucket_provider.connection:discover_resources
+  # cotique.bitbucket.connection:discover_resources
   - name: discover_resources
     kind: function.lua
     meta:
       comment: kickside.connection:connection discover_resources — returns the single Bitbucket repository this credential is scoped to (a repository access token cannot list "all member repos" — see BUILD-NOTES.md).
     source: file://discover_resources.lua
     imports:
-      connection_lib: cotique.bitbucket_provider.connection:connection_lib
-      types: cotique.bitbucket_provider.client:types
+      connection_lib: cotique.bitbucket.connection:connection_lib
+      types: cotique.bitbucket.client:types
     method: discover_resources
 
-  # cotique.bitbucket_provider.connection:bitbucket_connection
+  # cotique.bitbucket.connection:bitbucket_connection
   # The canonical credential-only provider binding shape, per
   # docs/kickside-development/04-connections-and-integrations.md "Minimal
   # Provider Example". Bitbucket Cloud only (api.bitbucket.org/2.0) — Server/
@@ -105,17 +105,17 @@ entries:
     contracts:
       - contract: kickside.contract:component
         methods:
-          get_status: cotique.bitbucket_provider.connection:get_status
+          get_status: cotique.bitbucket.connection:get_status
       - contract: kickside.connection:connection
         context_required: [component_id]
         methods:
-          get_status: cotique.bitbucket_provider.connection:get_status
-          test_connection: cotique.bitbucket_provider.connection:test_connection
-          discover_resources: cotique.bitbucket_provider.connection:discover_resources
+          get_status: cotique.bitbucket.connection:get_status
+          test_connection: cotique.bitbucket.connection:test_connection
+          discover_resources: cotique.bitbucket.connection:discover_resources
       - contract: kickside.contract:deletable
         context_required: [component_id]
         methods:
-          delete: cotique.bitbucket_provider.connection:delete
+          delete: cotique.bitbucket.connection:delete
 
   # discover_resources_test.lua lives in test/src/ (the standalone harness),
   # not here — see the equivalent note in ../client/_index.yaml for why.

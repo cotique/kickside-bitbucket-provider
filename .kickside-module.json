@@ -3,10 +3,10 @@
   "initialized": true,
   "identity": {
     "organization": "cotique",
-    "module": "bitbucket-provider",
-    "namespace": "cotique.bitbucket_provider",
-    "tag": "cotique-bitbucket-provider",
-    "route": "bitbucket-provider",
+    "module": "bitbucket",
+    "namespace": "cotique.bitbucket",
+    "tag": "cotique-bitbucket",
+    "route": "bitbucket",
     "title": "Bitbucket Connector",
     "githubOwner": "cotique"
   }

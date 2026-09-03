@@ -1,9 +1,9 @@
-# cotique/bitbucket-provider — initialize, verify, and publish a standalone Kickside module.
+# cotique/bitbucket — initialize, verify, and publish a standalone Kickside module.
 # Backend-only, no web component: matches the real reference providers that
 # need no custom Connect/picker UI (kickside/discord, kickside/slack, etc. —
 # see BUILD-NOTES.md), so there's no build/typecheck step and no --embed flag.
-MODULE  := bitbucket-provider
-LINT_NS := cotique.bitbucket_provider.*
+MODULE  := bitbucket
+LINT_NS := cotique.bitbucket.*
 TYPE    := plugin
 VIS     := private
 

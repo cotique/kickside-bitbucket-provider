@@ -1,4 +1,4 @@
-# Cotique Bitbucket
+# Bitbucket Connector
 
 Read-only Bitbucket Cloud connector for Kickside.
 

@@ -1,3 +1,3 @@
 organization: cotique
-module: bitbucket-provider-harness
-description: Standalone runnable harness that boots cotique/bitbucket-provider and runs its co-located *_test.lua suites.
+module: bitbucket-harness
+description: Standalone runnable harness that boots cotique/bitbucket and runs its co-located *_test.lua suites.

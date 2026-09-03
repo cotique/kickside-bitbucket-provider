@@ -2,7 +2,7 @@ local test = require("test")
 local transport = require("transport")
 
 local function define_tests()
-    test.describe("cotique.bitbucket_provider.client:transport credential resolution", function()
+    test.describe("cotique.bitbucket.client:transport credential resolution", function()
         test.it("builds a bearer-auth client for the stored access token", function()
             local client, err = transport.for_credentials({
                 access_token = "fake-placeholder-value",

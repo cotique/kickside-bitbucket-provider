@@ -1,8 +1,8 @@
 version: "1.0"
-namespace: cotique.bitbucket_provider
+namespace: cotique.bitbucket
 
 entries:
-  # cotique.bitbucket_provider:definition
+  # cotique.bitbucket:definition
   - name: definition
     kind: ns.definition
     readme: file://README.md
@@ -10,7 +10,7 @@ entries:
       title: Bitbucket Connector
       description: Read-only Bitbucket Cloud connector — a repository access token connection provider plus a pull-request pull source for Kickside Data Sync. Never creates, updates, merges, comments on, approves, or labels anything.
 
-  # cotique.bitbucket_provider:dep.kickside.contract
+  # cotique.bitbucket:dep.kickside.contract
   - version: "*"
     name: dep.kickside.contract
     kind: ns.dependency
@@ -18,7 +18,7 @@ entries:
       comment: Base contracts (kickside.contract:component/deletable, kickside.data:pullable) this module implements.
     component: kickside/contract
 
-  # cotique.bitbucket_provider:dep.kickside.connection
+  # cotique.bitbucket:dep.kickside.connection
   - version: "*"
     name: dep.kickside.connection
     kind: ns.dependency
@@ -26,7 +26,7 @@ entries:
       comment: kickside.connection:connection contract plus base_connection get_status/delete boilerplate.
     component: kickside/connection
 
-  # cotique.bitbucket_provider:dep.kickside.component
+  # cotique.bitbucket:dep.kickside.component
   - version: "*"
     name: dep.kickside.component
     kind: ns.dependency

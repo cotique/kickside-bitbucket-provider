@@ -62,7 +62,7 @@ local function raw_pr(overrides)
 end
 
 local function define_tests()
-    test.describe("cotique.bitbucket_provider.source.pull_core item normalization", function()
+    test.describe("cotique.bitbucket.source.pull_core item normalization", function()
         test.it("wraps every field into the confirmed pullable item envelope from a realistic fixture", function()
             local item = pull_core.normalize_item(raw_pr({}), "acme", "my-repo")
             test.eq(item.item_key, "bitbucket:acme/my-repo:pr:42")
@@ -111,7 +111,7 @@ local function define_tests()
         end)
     end)
 
-    test.describe("cotique.bitbucket_provider.source.pull_core pagination", function()
+    test.describe("cotique.bitbucket.source.pull_core pagination", function()
         test.it("requests the first page at the expected path with query params", function()
             local fc = new_fake_client({
                 { values = { raw_pr({ id = 1 }) }, pagelen = 50, size = 1, page = 1 },
@@ -213,7 +213,7 @@ local function define_tests()
         end)
     end)
 
-    test.describe("cotique.bitbucket_provider.source.pull_core pullable envelope (pull/pull_keys)", function()
+    test.describe("cotique.bitbucket.source.pull_core pullable envelope (pull/pull_keys)", function()
         test.it("returns a table cursor and reaches has_more with a non-empty next_cursor.next_url", function()
             local tp = new_fake_transport({
                 { values = { raw_pr({ id = 1 }) }, next = "https://api.bitbucket.org/2.0/repositories/acme/my-repo/pullrequests?page=2" },
@@ -298,7 +298,7 @@ local function define_tests()
         end)
     end)
 
-    test.describe("cotique.bitbucket_provider.source.pull_core conformance", function()
+    test.describe("cotique.bitbucket.source.pull_core conformance", function()
         -- Deterministic-by-URL fake, safe to reuse across every call the kit
         -- makes (the main pagination loop, the one-off failure-path call,
         -- and the pull_keys call) without needing separate queue state per
