@@ -127,6 +127,21 @@ entries:
       conformance: app:pullable_conformance
     method: run
 
+  - name: traits_test
+    kind: function.lua
+    meta:
+      type: test
+      suite: cotique_bitbucket
+      group: Bitbucket Connector
+      comment: traits/read_tool.lua and traits/write_tool.lua handler logic, plus the traits registry-shape (agent.trait/tool schemas) — all against a fake client/transport/pull_core, with no network calls.
+    source: file://traits_test.lua
+    modules: [registry, json]
+    imports:
+      test: wippy.test:test
+      read_tool: cotique.bitbucket.traits:read_tool_lib
+      write_tool: cotique.bitbucket.traits:write_tool_lib
+    method: run
+
   - name: db
     kind: db.sql.sqlite
     meta:

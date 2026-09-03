@@ -1,5 +1,259 @@
 # Build notes — cotique/bitbucket
 
+## 2026-09-03: write-access agent-tool traits (`traits/reader`/`writer`/`manager`)
+
+v2 feature on top of the published, read-only `cotique/bitbucket@0.1.0`: agent
+tool traits, following the exact real pattern `kickside/github`'s
+`traits/` folder ships (`providers-master\providers-master\github\src\traits\`,
+a local unpacked copy of `git.wippy.ai/kickside/providers` — real, working,
+read directly before writing anything here). This is an LLM/agent calling a
+tool interactively ("create this PR", "comment on this PR"), not a Data Sync
+writable sink (`kickside.data:writable`) — a different mechanism entirely,
+confirmed as the intended shape before starting. Built on branch
+`feat/write-access`; not pushed, no PR opened, `wippy publish` not run — the
+user will review and decide how this lands herself.
+
+### What was built
+
+- `src/traits/_index.yaml` — `cotique.bitbucket.traits:reader` / `:writer` /
+  `:manager` (`agent.trait`, `context_schema.connection_id`, picked via
+  `web_component: kickside-connection-trait-picker`), `:read_tool` /
+  `:write_tool` (`function.lua`, thin two-line wrappers around
+  `_fn_read_tool.lua`/`_fn_write_tool.lua`) and `:read_tool_lib` /
+  `:write_tool_lib` (`library.lua`, the real handlers) — the identical
+  "thin function.lua wrapper around a library.lua twin" split
+  `kickside.github.traits:*` uses, matching this module's own pre-existing
+  `source/pull.lua` around `source/pull_core.lua` convention.
+- `src/traits/read_tool.lua` (`BitbucketRead`) — actions `get_repo`,
+  `list_pull_requests`, `get_pull_request`, `list_pull_request_comments`.
+  `list_pull_requests` and `get_pull_request` reuse
+  `source/pull_core.lua`'s own `fetch_page`/`normalize_item` directly (the
+  same REST call, `{ values, next }` pagination handling, and item
+  normalization Data Sync's `pull()` already uses) rather than
+  reimplementing the Bitbucket REST call a second time, per the brief's
+  explicit instruction. `list_pull_request_comments` has no `pull_core`
+  equivalent (a different payload shape, not a pull request) and returns
+  the raw decoded Bitbucket API page, matching how
+  `kickside.github.traits:read_tool` returns `list_issue_comments`' raw
+  GitHub payload untouched.
+- `src/traits/write_tool.lua` (`BitbucketWrite`) — actions
+  `create_pull_request`, `update_pull_request`, `decline_pull_request`,
+  `create_comment`. Matches GitHub's writer-trait restraint exactly: never
+  merges, approves, or deletes anything, and never touches repository
+  files, branches, releases, settings, collaborators, or pipelines — stated
+  directly in the trait `prompt:` text, not just a code comment, per the
+  brief's explicit requirement.
+- `src/client/api.lua` — added `client:post(path_or_url, body)` and
+  `client:put(path_or_url, body)` to the per-connection client object
+  `M.new` returns (generic write verbs, symmetric to the existing `:get`).
+  Deliberately self-contained (a small amount of duplicated tail logic
+  rather than a shared refactor with `:get`) so this addition cannot change
+  `:get`'s already-tested behavior.
+- `src/client/transport.lua` — added `M.resolve(connection_id)`: resolves
+  an agent-trait `connection_id` (read from `ctx.get("connection_id")` by
+  the traits, mirroring `kickside.github.traits:read_tool`'s own
+  `connection_id()` helper) to `{ client, workspace, repo_slug }` in one
+  call. Traits need both an authenticated client and the repository path
+  segments, and go through this rather than `connection/connection_lib.lua`
+  because that module resolves the connection contract's own
+  `ctx.get("component_id")`, a different ctx key than the trait
+  `context_schema`'s `connection_id`. Exposed `M._component = component`
+  (a swappable module-level field, unused by the untouched `for_component`)
+  purely so `M.resolve` is unit-testable against a fake
+  `{ get_private_context = ... }` without a live, actor-scoped `component`
+  service — the standalone harness cannot open contracts under an actor
+  (see "Harness Limits" below), so this was the only way to give the new
+  function real unit coverage.
+- `src/connection/_index.yaml` — `access_token` field `help:` text now
+  mentions that `Pull requests: Write` is needed in addition to `Read` for
+  the Writer/Manager traits' write actions to work; no new credential field,
+  no scope selector, matching the brief's credential-model instruction
+  exactly. A token without write scope simply gets a real Bitbucket
+  `permission_denied` error back through the existing `data_error`
+  taxonomy — nothing in the module enforces or checks scope up front.
+- `src/_index.yaml`, `src/README.md`, `README.md` — updated to describe the
+  new write capability; the previous "never creates, updates, comments on,
+  approves, or labels anything" line is now scoped explicitly to the Data
+  Sync source (still true, unchanged) rather than the module as a whole.
+- Tests: `test/src/traits_test.lua` (new) — schema assertions for all five
+  registry entries (mirroring `kickside.github.traits:traits_test.lua`'s
+  own coverage) plus handler-logic tests for both tools against a fake
+  `transport`/`client`/`pull_core`, no network calls. `test/src/
+  transport_test.lua` — new cases for `M.resolve` against a fake
+  `component`. `test/src/_index.yaml` registers `traits_test` and its
+  `read_tool_lib`/`write_tool_lib` imports.
+
+### RESOLVED: a real `wippy lint` type-inference interaction in client/api.lua
+
+Adding `:post`/`:put` initially broke `wippy lint` for `:get` too, even
+though `:get`'s own source was never edited — worth recording since the next
+person extending a `client:api.lua` client object here will hit the same
+thing. Isolated by bisecting through several intermediate states (each
+re-checked with `wippy lint --ns "cotique.bitbucket.*"`), not guessed:
+
+1. The moment a *second* `function client:xxx(...)` colon-sugar method in
+   the same `M.new` scope also referenced the `auth_header`/`timeout`
+   upvalues `:get` already captures, Luau's inference for `:get`'s own
+   `http_client.get(...)` call sites stopped resolving them to `string` and
+   fell back to an unresolved/`unknown` type, failing lint — confirmed by
+   watching the exact same two `:get` error lines disappear and reappear
+   across several edits that touched nothing in `:get` itself, only the
+   number and shape of sibling closures capturing the same upvalues.
+2. Passing those upvalues as explicit function *parameters* into a
+   `local function write_request(...)` fixed `write_request`'s own call
+   site but not `:get`'s, as long as `client:post`/`client:put` were still
+   defined with colon-sugar (still two more closures capturing the same
+   upvalues to forward them in).
+3. What actually fixed it: defining `client.post`/`client.put` as plain
+   field assignments (`client.post = function(self, path_or_url, body) ...
+   end`) instead of `function client:post(...)` sugar, still callable the
+   same way (`client:post(...)`, since colon-call syntax passes `client`
+   itself as `self` regardless of how the field was assigned) — this
+   avoided whatever inference interaction the colon-sugar form triggers.
+4. Separately, `write_request`'s own `http_client.request(...)` call needed
+   its options table built as an inline literal at the call site (two
+   branches, mirroring `:get`'s own two-branch shape for its query
+   parameter), not a named `req_opts` local built up incrementally and then
+   passed by reference — the checker's record-vs-`{[string]: string}`
+   width-subtyping leniency only applied to a literal argument, not an
+   equivalently-shaped named variable. `:get`'s own headers/query
+   construction already happened to follow this same "inline literal at
+   the call site" shape, which is presumably why it type-checked cleanly
+   from the start.
+
+None of this required an explicit `any` type or a suppressed check — this
+linter rejects a value typed `any` at a specific-type call site outright
+(confirmed: wrapping the options table in an explicit `:: any` cast made
+the error *worse*, not better), so every fix above is a structural one.
+`:get` itself ends up byte-for-byte unchanged from the version that shipped
+in `v0.1.0` — confirmed by diffing it against git history before treating
+this as done. `wippy lint --ns "cotique.bitbucket.*"` now reports `No
+issues found, Checked 53 entries`.
+
+### client:output has no encode/truncate helper — a real, disclosed gap from the github reference
+
+`kickside.github.client:output` (the reference `traits/read_tool.lua`/
+`write_tool.lua` both call) exposes `M.sanitize`/`M.encode(data, max)`/
+`M.safe_prefix` — a full JSON-encode-with-truncation-and-redaction helper.
+This module's own pre-existing `client:output.lua` only ever implemented
+`M.redact(value)` (credential-key redaction alone, no JSON encoding or
+truncation) — read directly before assuming otherwise. Extending
+`client:output.lua` was not in this pass's authorized scope (only
+`client:api`/`transport` and the new `traits/` folder were), so
+`traits/read_tool.lua`/`write_tool.lua` each carry their own small local
+`encode()` (JSON-encode + a byte-length truncation guard) built on top of
+the existing, unmodified `M._output.redact` rather than reimplementing
+redaction. Functionally equivalent to the reference for this module's
+purposes; noted here since it is a real structural difference from the
+`kickside/github` shape the brief said to mirror, found only by reading the
+actual file rather than assuming its shape matched the reference.
+
+### Confirmed live in the browser vs. not live-verified — read this before trusting any write endpoint
+
+Per the write-access brief's explicit constraint: unlike every read
+endpoint this module ships (empirically verified against real
+`api.bitbucket.org` calls, see "Empirically-verified REST API pagination
+shapes" below), **no live write call was made against a real Bitbucket
+repository this pass** — doing so would mean actually creating/mutating a
+pull request or comment, which needs a real test repository and a
+write-scoped credential, neither of which exists here, and is not something
+to do without explicit authorization.
+
+What *was* done instead, and is a real, load-bearing distinction: the exact
+create/update/decline/comment field shapes and endpoint paths were read
+directly from the current, official Bitbucket Cloud REST API documentation
+in a real browser (`https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/`
+— a JS single-page app; a plain text fetch of that URL does not render its
+content, confirmed by the previous read-only build's own BUILD-NOTES entry,
+so this pass used the browser tool and extracted the rendered page text),
+not sourced only from the provider brief's own unconfirmed guess. Specifically
+confirmed by reading the live docs page (operation list + full request/
+response schema/example for each), 2026-09-03:
+
+- **`POST /repositories/{workspace}/{repo_slug}/pullrequests`** (create) —
+  confirmed minimum required fields are `title` and `source.branch.name`
+  (the docs' own prose, not just the generic schema). Optional fields
+  confirmed by the same prose: `destination.branch.name` (defaults to the
+  repo's main branch when omitted), `description`, `close_source_branch`,
+  `draft`, `reviewers` (array of `{ uuid }` objects — deliberately not
+  exposed by this tool, see the "Reviewers" note below). Matches the
+  brief's guessed shape exactly.
+- **`PUT /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}`**
+  (update) — confirmed partial; confirmed **no state-transition field of any
+  kind exists on this endpoint** ("Only open pull requests can be mutated"
+  is the operation's entire state-related statement in the docs). This
+  resolves the brief's explicit open question: closing/declining a pull
+  request is **not** a field on the update body.
+- **`POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/decline`**
+  (decline) — confirmed as its own, separate, clean endpoint: no request
+  body at all, `pullrequest:write`/`write:pullrequest:bitbucket` scope,
+  returns the updated pull request with `state: "DECLINED"`. This is the
+  real mechanism `update_pull_request` cannot reach — `decline_pull_request`
+  is its own action in `write_tool.lua` for exactly this reason.
+- **`POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments`**
+  (create comment) — confirmed request body shape `{ content: { raw: "..." } }`.
+  Matches the brief's guessed shape exactly, and is consistent with the
+  `{ type: "rendered", raw, markup, html }` "content object" pattern already
+  observed live elsewhere in this module's read side (e.g. a pull request's
+  own `summary` field).
+- **`GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}`**
+  (get one) and **`GET .../pullrequests/{pull_request_id}/comments`** (list
+  comments) — path shapes confirmed from the same docs page; used by
+  `read_tool.lua`'s `get_pull_request`/`list_pull_request_comments` actions.
+
+**Reviewers are deliberately not exposed** by `create_pull_request` even
+though the docs confirm the field exists: it takes an array of user UUIDs,
+not usernames or display names, and this trait's own read surface gives an
+agent no reliable way to obtain a UUID for anyone. Shipping a `reviewers`
+argument an agent can essentially never fill in correctly would be a
+half-working capability, not a real one — left out on purpose, not an
+oversight.
+
+**What this means concretely:** the request/response *shapes* above are
+real and current (read from Atlassian's own live documentation, not
+training data or the brief's unconfirmed guess), but the actual HTTP
+mechanics — auth header acceptance on these specific write verbs, exact
+error body shape on a 400/403 for a write call, whether `client:post`/
+`:put`'s generic implementation behaves correctly against a real Bitbucket
+response — have **not** been exercised against a real repository. This is a
+real, disclosed gap, matching the brief's own acceptance of this limitation
+for this pass. Whoever has access to a real test repository and a
+write-scoped repository access token (`Pull requests: Write`, per the
+updated credential `help:` text) should exercise `create_pull_request` /
+`update_pull_request` / `decline_pull_request` / `create_comment` for real
+before this ships to any actual user — the same "not exercised end-to-end
+against a live host" caveat the original read-only build already carries
+for `test_connection`/`discover_resources`/`pull`, now extended to the
+write side too.
+
+### Testing
+
+Unit-tested against fakes only, no real network calls or live component
+context (see "Not exercised end-to-end against a live host" below —
+unchanged, still true, now covering the write side too):
+`test/src/traits_test.lua` covers both tools' per-action argument
+validation (including that validation always runs *before* `transport.
+resolve` is called — asserted directly with a fake `transport.resolve`
+that errors if invoked), the exact request bodies sent for each write
+action (asserting `update_pull_request` never sends a `state` field and
+`decline_pull_request` sends no body at all), and error propagation
+(including a `permission_denied` case standing in for a token missing
+`Pull requests: Write`). `test/src/transport_test.lua` covers
+`M.resolve`'s connection_id validation, credential-to-client-plus-scope
+resolution, and its three failure modes (unresolvable credentials, missing
+workspace/repo_slug, missing access_token) against a fake `component`.
+`client/api.lua`'s new `:post`/`:put` are exercised only indirectly, through
+the trait tests' fake client objects — the same testing posture `:get`
+itself already had (there is no colocated `api_test.lua` for either verb;
+`http_client` is an ambient host module with no dependency-injection seam
+in that file, confirmed by inspection, not assumed).
+
+`make verify` re-run from a genuinely fresh checkout (`test/wippy.lock`,
+`test/.wippy/vendor`, and the root `wippy.lock` all deleted first, matching
+this project's own repeated "stale-cache false confidence" lesson) — see
+the deliverable checklist entry below for the exact result.
+
+
 This module is a Bitbucket Cloud connector for the Kickside platform: a
 `kickside.connection` provider (access token only — see the 2026-09-02
 entry below for why app passwords were removed) plus a

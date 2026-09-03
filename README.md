@@ -1,8 +1,13 @@
 # Bitbucket Connector
 
-Read-only Kickside connector for Bitbucket Cloud — a repository access token
-connection provider plus a pull-request pull source for Kickside Data Sync.
-Never creates, updates, merges, comments on, approves, or labels anything.
+Kickside connector for Bitbucket Cloud — a repository access token
+connection provider, a read-only pull-request pull source for Kickside Data
+Sync, and agent-tool traits for limited interactive pull-request read/write
+access. The Data Sync source itself stays read-only: it never creates,
+updates, merges, comments on, approves, or labels anything. The write agent
+tool is narrow by design — create/update/decline a pull request, comment on
+one — and never merges, approves, deletes, or reaches repository files,
+branches, releases, settings, collaborators, or pipelines.
 
 See [`src/README.md`](src/README.md) for the module's own auth/layout/planes
 summary (the same content the Wippy Hub's "Read Me" tab shows) and
@@ -30,6 +35,11 @@ reference source this module was built against.
 - `cotique.bitbucket.source:repo_pulls_source` implements
   `kickside.data:pullable`; `cotique.bitbucket.source:repo_pulls` is the
   `kickside.automation.port` entry exposing it to Data Sync.
+- `cotique.bitbucket.traits:reader` / `:writer` / `:manager` — agent-tool
+  traits giving an LLM/agent interactive access to the connected
+  repository's pull requests (list/get/comments via `read_tool`;
+  create/update/decline/comment via `write_tool`), distinct from the
+  Data Sync source above. Mirrors `kickside.github.traits:*`.
 - `test/` — an isolated standalone harness plus behavioral/wiring suites.
 
 This module owns no persistence of its own — Kickside Data Sync's own engine

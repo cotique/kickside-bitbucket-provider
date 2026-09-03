@@ -101,7 +101,7 @@ entries:
             label: Access token
             type: password
             required: true
-            help: "Create one at THIS repository's own Settings > Security > Access tokens, scoped to Repositories: Read and Pull requests: Read only."
+            help: "Create one at THIS repository's own Settings > Security > Access tokens, scoped to Repositories: Read and Pull requests: Read. Add Pull requests: Write too if you want the Bitbucket Writer/Manager agent traits to be able to create or update pull requests and comments — without it, write actions fail with a real Bitbucket permission error."
     contracts:
       - contract: kickside.contract:component
         methods:
