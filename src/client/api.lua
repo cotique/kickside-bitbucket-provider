@@ -9,6 +9,20 @@
 -- exercised directly by pull_core.lua's own tests via a fake `client`
 -- object satisfying the same :get(path, opts) interface, so its pagination
 -- logic is provable without a real network call.
+--
+-- :post/:put (added for the write-access agent-tool traits, traits/*) are
+-- NOT empirically verified against a live call the way :get's shapes are —
+-- per the write-access brief, no write call was made against a real
+-- repository this pass. They are built against the documented request/
+-- response shapes confirmed live in the browser against
+-- https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/
+-- (create/update/decline a pull request, create a pull request comment —
+-- see BUILD-NOTES.md's write-access entry for exactly what was read there),
+-- and exercised only indirectly, through traits/write_tool.lua's tests
+-- against a fake client object — the same testing posture :get itself has
+-- always had here (there is no colocated api_test.lua for either verb;
+-- http_client is an ambient host module with no dependency-injection seam
+-- in this file).
 
 local http_client = require("http_client")
 local json = require("json")
@@ -113,6 +127,90 @@ function M.new(opts)
             return nil, data_error.new("invalid_response", "could not decode Bitbucket response: " .. tostring(derr), false, "provider")
         end
         return decoded, nil
+    end
+
+    -- POST/PUT path_or_url with an optional JSON-encoded `body`. `body ==
+    -- nil` sends no request body at all (Bitbucket's PR decline endpoint
+    -- takes none). Returns (decoded_json, nil) on 2xx, or (nil, data_error)
+    -- on any failure — the same two-value bare-DataError-record convention
+    -- :get above uses. Deliberately self-contained rather than sharing :get's
+    -- implementation, so this addition cannot change :get's already-tested
+    -- behavior; some tail logic is duplicated on purpose.
+    --
+    -- auth_header/req_base_url/req_timeout are taken as explicit parameters
+    -- rather than captured as upvalues (unlike :get above, which does
+    -- capture auth_header/base_url/timeout as upvalues): confirmed via
+    -- `wippy lint` that having a *second* closure in this same M.new scope
+    -- also capture those same upvalues made Luau's type inference for
+    -- :get's own already-working http_client.get(...) calls widen to an
+    -- unresolved/unknown type and start failing lint, even though :get's
+    -- own code was untouched. Passing the values as plain call arguments
+    -- instead avoids the shared-upvalue-capture interaction entirely; the
+    -- values themselves and the resulting request are identical.
+    local function write_request(req_auth_header, req_base_url, req_timeout, method, path_or_url, body)
+        local url = resolve_url(req_base_url, path_or_url)
+        local headers = { ["Authorization"] = req_auth_header, ["Accept"] = "application/json" }
+
+        -- Two inline table-literal call sites (mirroring :get's own
+        -- two-branch shape above), not one named `req_opts` local built up
+        -- across statements then passed by reference: confirmed via `wippy
+        -- lint` that a literal table constructed directly at the call site
+        -- type-checks against http_client's options type, while an
+        -- equivalent-shaped named local built incrementally does not (the
+        -- checker's record-vs-index-signature width subtyping only kicks
+        -- in for a fresh literal argument). Same request either way.
+        local resp, err
+        if body ~= nil then
+            local encoded, eerr = json.encode(body)
+            if eerr then
+                return nil, data_error.new("invalid_config", "could not encode Bitbucket request body: " .. tostring(eerr), false, "flow")
+            end
+            headers["Content-Type"] = "application/json"
+            resp, err = http_client.request(method, url, { headers = headers, timeout = req_timeout, body = encoded })
+        else
+            resp, err = http_client.request(method, url, { headers = headers, timeout = req_timeout })
+        end
+        if err then
+            return nil, data_error.from_transport(err)
+        end
+        if not resp or type(resp.status_code) ~= "number" then
+            return nil, data_error.new("network_error", "no response from Bitbucket", true, "provider")
+        end
+
+        if resp.status_code < 200 or resp.status_code >= 300 then
+            local decoded = nil
+            if type(resp.body) == "string" and resp.body ~= "" then
+                decoded = json.decode(resp.body)
+            end
+            return nil, data_error.from_http(resp.status_code, decoded, resp.body)
+        end
+
+        if type(resp.body) ~= "string" or resp.body == "" then
+            return {}, nil
+        end
+
+        local decoded, derr = json.decode(resp.body)
+        if derr then
+            return nil, data_error.new("invalid_response", "could not decode Bitbucket response: " .. tostring(derr), false, "provider")
+        end
+        return decoded, nil
+    end
+
+    -- Plain field assignment (`client.post = function(self, ...)`), not
+    -- `function client:post(...)` colon sugar: confirmed via `wippy lint`
+    -- that adding a second/third colon-sugar method on `client` in this
+    -- scope, referencing the same auth_header/base_url/timeout upvalues
+    -- :get already captures, made Luau's type inference for :get's own
+    -- unmodified http_client.get(...) calls widen to an unresolved type
+    -- and start failing lint — this form avoids that interaction. Still
+    -- callable as `client:post(path_or_url, body)` (colon call syntax
+    -- passes `client` itself as `self`, ignored here).
+    client.post = function(self, path_or_url, body)
+        return write_request(auth_header, base_url, timeout, "POST", path_or_url, body)
+    end
+
+    client.put = function(self, path_or_url, body)
+        return write_request(auth_header, base_url, timeout, "PUT", path_or_url, body)
     end
 
     return client

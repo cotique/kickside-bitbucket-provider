@@ -8,7 +8,7 @@ entries:
     readme: file://README.md
     meta:
       title: Bitbucket Connector
-      description: Read-only Bitbucket Cloud connector — a repository access token connection provider plus a pull-request pull source for Kickside Data Sync. Never creates, updates, merges, comments on, approves, or labels anything.
+      description: Bitbucket Cloud connector — a repository access token connection provider, a read-only pull-request pull source for Kickside Data Sync, and agent-tool traits for limited interactive pull-request read/write access (create/update/decline a pull request, comment on one). The Data Sync source itself stays read-only; it never creates, updates, merges, comments on, approves, or labels anything. Never merges, approves, or deletes anything, and never touches repository files, branches, releases, settings, collaborators, or pipelines.
 
   # cotique.bitbucket:dep.kickside.contract
   - version: "*"

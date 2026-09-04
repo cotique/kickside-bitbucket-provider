@@ -1,0 +1,231 @@
+version: "1.0"
+namespace: cotique.bitbucket.traits
+
+# Agent-tool traits — an LLM/agent calling a tool interactively ("create this
+# PR", "comment on this PR"), NOT a Data Sync writable sink. Mirrors
+# kickside.github.traits:* 1:1: three agent.trait entries (reader/writer/
+# manager), each picking the connection via context_schema.connection_id
+# (web_component: kickside-connection-trait-picker), plus a function.lua
+# tool entry per capability that is a two-line pass-through wrapper
+# (source/_fn_*_tool.lua) around a library.lua twin (read_tool.lua/
+# write_tool.lua) carrying the real handler — same "thin wrapper around a
+# real library" split this codebase already uses everywhere else
+# (source/pull.lua around source/pull_core.lua).
+#
+# traits_test.lua (the schema + handler test suite, mirroring
+# kickside.github.traits:traits_test) lives in test/src/, not colocated here
+# — this module's own wippy.yaml excludes meta.type: test even through the
+# standalone harness's workspace replacement (see client/_index.yaml's note
+# for the confirmed reason); it follows the same colocated-in-the-harness
+# shape as this module's other logic tests.
+
+entries:
+  - name: reader
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      title: Bitbucket Reader
+      public: true
+      icon: tabler:brand-bitbucket
+      comment: Reads pull requests, a pull request's details, and its comments from the connected Bitbucket Cloud repository.
+      tags: [bitbucket, git, code, pull-requests, read-only]
+      web_component: kickside-connection-trait-picker
+      provider: bitbucket
+      context_schema:
+        type: object
+        properties:
+          connection_id:
+            type: string
+            description: Bitbucket connection component id selected by the trait picker.
+        additionalProperties: false
+    prompt: |
+      You can inspect Bitbucket through the BitbucketRead tool. Use get_repo to
+      confirm the connected repository, list_pull_requests to find pull
+      requests (optionally filtered by state), get_pull_request for a single
+      pull request's details, and list_pull_request_comments for its
+      discussion.
+
+      The Bitbucket connection is selected on this capability and is scoped
+      to exactly one repository. Do not ask the user for a connection id, a
+      workspace, or a repository slug. Resolve a pull request's id with
+      list_pull_requests before relying on it.
+    tools:
+      - cotique.bitbucket.traits:read_tool
+
+  - name: read_tool
+    kind: function.lua
+    meta:
+      type: tool
+      mcp:
+        required_scopes: [state.read]
+      title: Bitbucket Read
+      tags: [bitbucket, git, code, pull-requests, read-only]
+      llm_alias: BitbucketRead
+      llm_description: "Read pull requests from the connected Bitbucket Cloud repository. Actions: get_repo, list_pull_requests, get_pull_request, list_pull_request_comments. The repository is fixed by the connection; only a pull request number is ever needed. Returns JSON text as a string; failures return encoded { success:false, error }."
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "The read action to perform",
+              "enum": ["get_repo", "list_pull_requests", "get_pull_request", "list_pull_request_comments"]
+            },
+            "number": { "type": "string", "description": "Pull request id, required for get_pull_request and list_pull_request_comments" },
+            "state": { "type": "string", "description": "Optional pull request state filter for list_pull_requests. Leave unset for Bitbucket's own default (OPEN only).", "enum": ["OPEN", "MERGED", "DECLINED", "SUPERSEDED"] },
+            "limit": { "type": "integer", "description": "Max rows to return per page for list actions (default 25, max 100)" },
+            "cursor": { "type": "string", "description": "Opaque continuation cursor from a previous call's next_cursor field, for list_pull_requests or list_pull_request_comments" }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        }
+      output_schema: |
+        {
+          "type": "string",
+          "description": "JSON text returned as a string. Successful reads return the encoded Bitbucket API payload (list actions as { items|values, next_cursor, has_more }), truncated to fit tool output limits. Failures return encoded { success:false, error }."
+        }
+    source: file://_fn_read_tool.lua
+    method: handler
+    modules: [ctx]
+    imports:
+      transport: cotique.bitbucket.client:transport
+      output: cotique.bitbucket.client:output
+      implementation: cotique.bitbucket.traits:read_tool_lib
+
+  - name: read_tool_lib
+    kind: library.lua
+    meta: { name: read_tool_lib, comment: "BitbucketRead handler module for tests." }
+    source: file://read_tool.lua
+    modules: [ctx, json]
+    imports:
+      transport: cotique.bitbucket.client:transport
+      output: cotique.bitbucket.client:output
+      pull_core: cotique.bitbucket.source:pull_core
+
+  - name: writer
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      title: Bitbucket Writer
+      public: true
+      icon: tabler:brand-bitbucket
+      comment: Creates and updates pull requests and pull request comments on the connected Bitbucket Cloud repository.
+      tags: [bitbucket, git, code, pull-requests, write]
+      web_component: kickside-connection-trait-picker
+      provider: bitbucket
+      context_schema:
+        type: object
+        properties:
+          connection_id:
+            type: string
+            description: Bitbucket connection component id selected by the trait picker.
+        additionalProperties: false
+    prompt: |
+      You can mutate Bitbucket pull requests through the BitbucketWrite tool:
+      create_pull_request, update_pull_request, decline_pull_request, and
+      create_comment. Use it only for pull-request workflow changes the user
+      requested. This tool never merges, approves, or deletes anything, and it
+      cannot touch repository files, branches, releases, settings,
+      collaborators, or pipelines; those write surfaces are not part of this
+      capability.
+
+      The Bitbucket connection is selected on this capability and is scoped
+      to exactly one repository. Do not ask the user for a connection id, a
+      workspace, or a repository slug. Use BitbucketRead first when you need
+      to verify the repository, find a pull request's number, or inspect its
+      current state.
+    tools:
+      - cotique.bitbucket.traits:write_tool
+
+  - name: manager
+    kind: registry.entry
+    meta:
+      type: agent.trait
+      title: Bitbucket Manager
+      public: true
+      icon: tabler:brand-bitbucket
+      comment: Full read and pull-request-management access for the connected Bitbucket Cloud repository.
+      tags: [bitbucket, git, code, pull-requests, read-write]
+      web_component: kickside-connection-trait-picker
+      provider: bitbucket
+      context_schema:
+        type: object
+        properties:
+          connection_id:
+            type: string
+            description: Bitbucket connection component id selected by the trait picker.
+        additionalProperties: false
+    prompt: |
+      You have Bitbucket repository read access and pull-request-management
+      write access. Use BitbucketRead to verify the connected repository, find
+      and inspect pull requests, and read their comments. Use BitbucketWrite
+      only for create_pull_request, update_pull_request, decline_pull_request,
+      and create_comment.
+
+      Preferred workflow: verify the repository and the relevant pull request
+      with BitbucketRead, then perform the requested mutation with
+      BitbucketWrite. Do not merge, approve, delete, or mutate repository
+      files, branches, releases, settings, collaborators, or pipelines; this
+      capability does not grant those operations.
+
+      The Bitbucket connection is selected on this capability and is scoped
+      to exactly one repository. Do not ask the user for a connection id, a
+      workspace, or a repository slug.
+    tools:
+      - cotique.bitbucket.traits:read_tool
+      - cotique.bitbucket.traits:write_tool
+
+  - name: write_tool
+    kind: function.lua
+    meta:
+      type: tool
+      mcp:
+        required_scopes: [state.read, state.write]
+      title: Bitbucket Write
+      tags: [bitbucket, git, code, pull-requests, write]
+      llm_alias: BitbucketWrite
+      llm_description: "Create and update pull requests and pull request comments on the connected Bitbucket Cloud repository. Actions: create_pull_request, update_pull_request, decline_pull_request, create_comment. The repository is fixed by the connection; never merges, approves, or deletes anything. Returns JSON text as a string; failures return encoded { success:false, error }."
+      input_schema: |
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "The write action to perform",
+              "enum": ["create_pull_request", "update_pull_request", "decline_pull_request", "create_comment"]
+            },
+            "number": { "type": "string", "description": "Pull request id, required for update_pull_request, decline_pull_request, and create_comment" },
+            "title": { "type": "string", "description": "Pull request title, required for create_pull_request, optional for update_pull_request" },
+            "description": { "type": "string", "description": "Pull request description for create_pull_request/update_pull_request" },
+            "source_branch": { "type": "string", "description": "Source branch name, required for create_pull_request" },
+            "destination_branch": { "type": "string", "description": "Destination branch name for create_pull_request/update_pull_request. Defaults to the repository's main branch when omitted on create." },
+            "close_source_branch": { "type": "boolean", "description": "Whether to close the source branch on merge, for create_pull_request" },
+            "body": { "type": "string", "description": "Comment text, required for create_comment" }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        }
+      output_schema: |
+        {
+          "type": "string",
+          "description": "JSON text returned as a string. Successful writes return the encoded Bitbucket API payload, truncated to fit tool output limits. Failures return encoded { success:false, error }."
+        }
+    source: file://_fn_write_tool.lua
+    method: handler
+    modules: [ctx]
+    imports:
+      transport: cotique.bitbucket.client:transport
+      output: cotique.bitbucket.client:output
+      implementation: cotique.bitbucket.traits:write_tool_lib
+
+  - name: write_tool_lib
+    kind: library.lua
+    meta: { name: write_tool_lib, comment: "BitbucketWrite handler module for tests." }
+    source: file://write_tool.lua
+    modules: [ctx, json]
+    imports:
+      transport: cotique.bitbucket.client:transport
+      output: cotique.bitbucket.client:output
+
+  # traits_test.lua lives in test/src/ (the standalone harness), not here —
+  # see the equivalent note in ../client/_index.yaml for why.
